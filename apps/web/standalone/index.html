@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lepton Butler</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root { --bg:#0c0f14; --surface:#141a22; --border:#2a3544; --text:#e8edf4; --muted:#8b9cb3; --accent:#3dffa8; --accent-dim:#1a9d62; --danger:#ff6b6b; --font:"DM Sans",system-ui,sans-serif; --mono:"JetBrains Mono",monospace; }
+    * { box-sizing:border-box; } body { margin:0; font-family:var(--font); background:var(--bg); color:var(--text); line-height:1.5; }
+    .shell { max-width:1100px; margin:0 auto; padding:2rem 1.5rem; }
+    .header { display:flex; flex-wrap:wrap; justify-content:space-between; gap:1rem; margin-bottom:2rem; }
+    .brand h1 { margin:0; font-size:1.75rem; } .tagline { color:var(--muted); font-size:.9rem; margin:.25rem 0 0; }
+    .logo { color:var(--accent); font-size:2rem; margin-right:.75rem; }
+    .chain-badge { font-family:var(--mono); font-size:.75rem; padding:.35rem .65rem; background:#1c2430; border:1px solid var(--border); border-radius:6px; color:var(--muted); }
+    .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1rem; margin-bottom:1.5rem; }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:1.25rem; }
+    .card.primary { border-color:var(--accent-dim); grid-column:span 2; }
+    .label { font-size:.8rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+    .value { font-size:1.75rem; font-weight:600; }
+    .progress { height:6px; background:#1c2430; border-radius:3px; margin:.5rem 0; overflow:hidden; }
+    .progress div { height:100%; background:linear-gradient(90deg,var(--accent-dim),var(--accent)); }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+    @media(max-width:768px){ .grid{ grid-template-columns:1fr; } .card.primary{ grid-column:span 1; } }
+    h2 { margin:0 0 .5rem; font-size:1.1rem; }
+    .desc { color:var(--muted); font-size:.85rem; margin-bottom:1rem; }
+    .row { display:flex; justify-content:space-between; align-items:center; padding:.75rem 0; border-bottom:1px solid var(--border); }
+    .row:last-child { border-bottom:none; }
+    .muted { display:block; font-size:.8rem; color:var(--muted); }
+    table { width:100%; border-collapse:collapse; font-size:.875rem; }
+    th,td { text-align:left; padding:.65rem .5rem; border-bottom:1px solid var(--border); }
+    th { color:var(--muted); font-size:.75rem; text-transform:uppercase; }
+    .pill { font-size:.7rem; font-weight:600; text-transform:uppercase; padding:.2rem .5rem; border-radius:4px; }
+    .pill.settled { background:rgba(61,255,168,.15); color:var(--accent); }
+    .pill.blocked { background:rgba(255,107,107,.15); color:var(--danger); }
+    .err { background:var(--surface); border:1px solid var(--danger); border-radius:12px; padding:2rem; text-align:center; }
+    button { font-family:var(--font); padding:.5rem 1rem; border-radius:8px; border:1px solid var(--border); background:#1c2430; color:var(--text); cursor:pointer; }
+    input[type=checkbox] { width:1.1rem; height:1.1rem; accent-color:var(--accent); }
+    footer { text-align:center; color:var(--muted); font-size:.85rem; margin-top:2rem; }
+    footer a { color:var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="shell" id="app">Loading…</div>
+  <script type="module">
+    const API = location.origin;
+
+    async function api(path, opts) {
+      const r = await fetch(API + path, opts);
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+
+    function fmt(n) { return Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 }); }
+
+    async function toggleMerchant(policy, id, enabled) {
+      const merchants = policy.merchants.map(m => m.id === id ? { ...m, enabled } : m);
+      return api("/api/policy", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ merchants }) });
+    }
+
+    async function toggleAgent(policy, role, enabled) {
+      const agents = policy.agents.map(a => a.role === role ? { ...a, enabled } : a);
+      return api("/api/policy", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agents }) });
+    }
+
+    async function render() {
+      const root = document.getElementById("app");
+      try {
+        const [policy, ledger] = await Promise.all([api("/api/policy"), api("/api/ledger")]);
+        const spent = Number(policy.dailyLimitUsdc) - Number(ledger.remainingDailyUsdc);
+        const pct = Math.min(100, (spent / Number(policy.dailyLimitUsdc)) * 100);
+
+        root.innerHTML = `
+          <header class="header">
+            <div style="display:flex;align-items:flex-start">
+              <span class="logo">◆</span>
+              <div><h1>Lepton Butler</h1><p class="tagline">Autonomous paying agent · Arc testnet · x402 (dev mode)</p></div>
+            </div>
+            <div style="display:flex;gap:.75rem;align-items:center">
+              <span class="chain-badge">Arc 5042002</span>
+              <button onclick="resetPolicy()">Reset policy</button>
+            </div>
+          </header>
+          <section class="metrics">
+            <article class="card primary">
+              <span class="label">Daily budget remaining</span>
+              <div class="value">$${fmt(ledger.remainingDailyUsdc)}</div>
+              <div class="progress"><div style="width:${pct}%"></div></div>
+              <span class="muted">$${fmt(spent)} spent of $${fmt(policy.dailyLimitUsdc)} cap</span>
+            </article>
+            <article class="card"><span class="label">Weekly cap</span><div class="value">$${fmt(policy.weeklyLimitUsdc)}</div></article>
+            <article class="card"><span class="label">Ledger entries</span><div class="value">${ledger.records.length}</div></article>
+          </section>
+          <div class="grid">
+            <section class="card">
+              <h2>Agents</h2>
+              <p class="desc">Sub-agents with per-role daily limits.</p>
+              ${policy.agents.map(a => `
+                <div class="row">
+                  <div><strong style="text-transform:capitalize">${a.role}</strong>
+                    <span class="muted">$${fmt(a.dailyLimitUsdc)}/day · ${a.categories.join(", ")}</span></div>
+                  <input type="checkbox" ${a.enabled ? "checked" : ""} data-agent="${a.role}" />
+                </div>`).join("")}
+            </section>
+            <section class="card">
+              <h2>Merchants</h2>
+              <p class="desc">x402 endpoints Butler may pay.</p>
+              ${policy.merchants.map(m => `
+                <div class="row">
+                  <div><strong>${m.label}</strong><span class="muted">${m.category} · $${fmt(m.priceUsdc || 0)}</span></div>
+                  <input type="checkbox" ${m.enabled ? "checked" : ""} data-merchant="${m.id}" />
+                </div>`).join("")}
+            </section>
+          </div>
+          <section class="card" style="margin-top:1rem">
+            <h2>Spend ledger</h2>
+            ${ledger.records.length === 0 ? '<p class="desc">No payments yet. Hit a merchant endpoint to simulate x402.</p>' : `
+            <table><thead><tr><th>Time</th><th>Agent</th><th>Merchant</th><th>Amount</th><th>Status</th></tr></thead>
+            <tbody>${[...ledger.records].reverse().map(r => `
+              <tr><td>${new Date(r.at * 1000).toLocaleString()}</td><td style="text-transform:capitalize">${r.agent}</td>
+              <td>${r.merchantId}</td><td>$${fmt(r.amountUsdc)}</td>
+              <td><span class="pill ${r.status}">${r.status}</span>${r.reason ? `<span class="muted">${r.reason}</span>` : ""}</td></tr>`).join("")}
+            </tbody></table>`}
+          </section>
+          <footer><p>Dev mode — simulated x402. Fund wallet at <a href="https://faucet.circle.com" target="_blank">faucet.circle.com</a> for live payments.</p></footer>`;
+
+        root.querySelectorAll("[data-merchant]").forEach(el => {
+          el.onchange = async e => {
+            await toggleMerchant(policy, el.dataset.merchant, e.target.checked);
+            render();
+          };
+        });
+        root.querySelectorAll("[data-agent]").forEach(el => {
+          el.onchange = async e => {
+            await toggleAgent(policy, el.dataset.agent, e.target.checked);
+            render();
+          };
+        });
+      } catch (e) {
+        root.innerHTML = `<div class="err"><strong>Cannot reach Butler API</strong><p>${e.message}</p></div>`;
+      }
+    }
+
+    window.resetPolicy = async () => { await api("/api/policy/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }); render(); };
+    render();
+    setInterval(render, 5000);
+  </script>
+</body>
+</html>
