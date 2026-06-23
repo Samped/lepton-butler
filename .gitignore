@@ -1,0 +1,17 @@
+node_modules/
+.vendor/
+.circle-cli-global/
+dist/
+apps/web/dist/
+*.tsbuildinfo
+.env
+.env.local
+*.log
+.DS_Store
+.data/
+coverage/
+.turbo/
+packages/contracts/lib/
+packages/contracts/out/
+packages/contracts/cache/
+vendor/circle-agent/.git/

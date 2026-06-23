@@ -1,0 +1,39 @@
+{
+  "name": "lepton-butler",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Lepton Butler — autonomous paying agent on Arc with policy-enforced budgets",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "postinstall": "node -e \"console.log('Butler ready. Run npm run setup:lepton then copy .env.example → .env')\"",
+    "setup:lepton": "bash scripts/setup-lepton-stack.sh",
+    "arc:login": "PATH=\"$HOME/.local/bin:$PATH\" arc-canteen login",
+    "arc:context": "PATH=\"$HOME/.local/bin:$PATH\" arc-canteen context sync",
+    "arc:rpc": "PATH=\"$HOME/.local/bin:$PATH\" bash scripts/load-arc-rpc.sh",
+    "circle:install": "python3 scripts/install-circle-cli.py",
+    "circle": "bash scripts/circle.sh",
+    "circle:login": "bash scripts/circle.sh wallet login --testnet",
+    "circle:wallet": "bash scripts/circle-wallet-setup.sh",
+    "dev": "npm run dev:api & npm run dev:web",
+    "dev:api": "npm run dev -w @butler/api",
+    "dev:web": "npm run dev -w @butler/web",
+    "install:deps": "python3 scripts/install-deps.py",
+    "repair:deps": "python3 scripts/repair-deps.py",
+    "agent": "npm run start -w @butler/agent",
+    "delegation:deploy": "npm run deploy -w @butler/delegation-app",
+    "delegation:bootstrap": "bash scripts/bootstrap-foundry.sh",
+    "delegation:deploy:forge": "bash scripts/bootstrap-foundry.sh && bash scripts/deploy-arc-delegation.sh",
+    "delegation:setup": "npm run setup -w @butler/delegation-app",
+    "delegation:pay": "npm run pay -w @butler/delegation-app",
+    "delegation:pay:dry": "npm run pay:dry -w @butler/delegation-app",
+    "build": "npm run build -w @butler/web",
+    "test": "npm run test -w @butler/core",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20.18.2"
+  }
+}
