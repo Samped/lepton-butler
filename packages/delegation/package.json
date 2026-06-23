@@ -1,0 +1,21 @@
+{
+  "name": "@butler/delegation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@butler/arc": "*",
+    "@butler/core": "*",
+    "@metamask/smart-accounts-kit": "^1.6.0",
+    "viem": "^2.48.11"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
