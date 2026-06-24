@@ -126,11 +126,18 @@ export function appendBriefToServiceUrl(url: string, brief?: string): string {
 
 export function appendServiceUrlParams(
   url: string,
-  opts?: { brief?: string; initiator?: "user" | "system" | "cli"; context?: string; contextId?: string }
+  opts?: {
+    brief?: string;
+    initiator?: "user" | "system" | "cli";
+    context?: string;
+    contextId?: string;
+    briefContextId?: string;
+  }
 ): string {
   const u = new URL(url);
   if (opts?.brief?.trim()) u.searchParams.set("brief", opts.brief.trim());
   if (opts?.initiator) u.searchParams.set("butler_initiator", opts.initiator);
+  if (opts?.briefContextId?.trim()) u.searchParams.set("briefContextId", opts.briefContextId.trim());
   if (opts?.contextId?.trim()) u.searchParams.set("contextId", opts.contextId.trim());
   else if (opts?.context?.trim()) u.searchParams.set("context", opts.context.trim().slice(0, 2000));
   return u.toString();
