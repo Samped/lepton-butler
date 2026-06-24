@@ -55,7 +55,7 @@ const SERVICE_LABELS: Record<string, string> = {
 const NAV: { id: Tab; label: string; Icon: typeof IconMarketplace }[] = [
   { id: "agent", label: "Agent", Icon: IconAgent },
   { id: "library", label: "Library", Icon: IconLibrary },
-  { id: "marketplace", label: "Marketplace", Icon: IconMarketplace },
+  { id: "marketplace", label: "Auctions", Icon: IconMarketplace },
   { id: "policy", label: "Policy", Icon: IconPolicy },
   { id: "activity", label: "Activity", Icon: IconActivity },
   { id: "trace", label: "Trace", Icon: IconTrace },
@@ -79,6 +79,7 @@ export function App() {
   const [ledgerTotalCount, setLedgerTotalCount] = useState(0);
   const [activityPayerAddresses, setActivityPayerAddresses] = useState<string[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [payerBusy, setPayerBusy] = useState(false);
 
   const loadActivityLedger = useCallback(async (scope: ActivityScope) => {
     setActivityLoading(true);
@@ -104,11 +105,13 @@ export function App() {
     }
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (opts?: { quiet?: boolean }) => {
     const failed: string[] = [];
     const pick = <T,>(r: PromiseSettledResult<T>, label: string): T | null => {
       if (r.status === "fulfilled") return r.value;
-      failed.push(`${label}: ${formatWorkflowError(r.reason instanceof Error ? r.reason.message : "failed")}`);
+      if (!opts?.quiet) {
+        failed.push(`${label}: ${formatWorkflowError(r.reason instanceof Error ? r.reason.message : "failed")}`);
+      }
       return null;
     };
 
@@ -120,12 +123,18 @@ export function App() {
     if (policyRes) setPolicy(policyRes);
 
     if (!healthRes && !policyRes) {
-      setError(failed.join(" · ") || "Cannot reach API — run npm run dev:api");
+      if (!opts?.quiet) {
+        setError(failed.join(" · ") || "Cannot reach API — run npm run dev:api");
+      }
       setLoading(false);
       return;
     }
 
-    setError(failed.length > 0 ? failed.join(" · ") : null);
+    if (!opts?.quiet) {
+      setError(failed.length > 0 ? failed.join(" · ") : null);
+    } else if (failed.length === 0) {
+      setError(null);
+    }
     setLoading(false);
 
     const [l, as] = await Promise.allSettled([getLedger(), getAgentStatus()]);
@@ -143,14 +152,14 @@ export function App() {
       setAgentStatus(asRes);
       if (asRes.activityPayerAddresses?.length) setActivityPayerAddresses(asRes.activityPayerAddresses);
     }
-    if (failed.length > 0) setError(failed.join(" · "));
+    if (!opts?.quiet && failed.length > 0) setError(failed.join(" · "));
   }, []);
 
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 15_000);
+    const id = setInterval(() => void refresh({ quiet: payerBusy }), 15_000);
     return () => clearInterval(id);
-  }, [refresh]);
+  }, [refresh, payerBusy]);
 
   useEffect(() => {
     if (tab !== "activity") return;
@@ -247,7 +256,19 @@ export function App() {
     );
   }
 
-  if (!policy) return null;
+  if (!policy) {
+    return (
+      <div className="app-shell">
+        <div className="error-screen">
+          <h1>Policy unavailable</h1>
+          <p>{error ?? "Could not load Butler policy from the API."}</p>
+          <button type="button" className="btn accent" onClick={() => void refresh()}>
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const activeNav = NAV.find((n) => n.id === tab)!;
 
@@ -372,7 +393,14 @@ export function App() {
             </div>
           )}
 
-          {error && (
+          {payerBusy && (tab === "agent" || tab === "marketplace") && (
+            <div className="inline-alert info">
+              <strong>Payer running</strong> — auctions and x402 payments can take several minutes. Keep this tab
+              open; your deliverable will appear in Library when finished.
+            </div>
+          )}
+
+          {error && !payerBusy && (
             <div className="inline-alert">
               <strong>Partial load</strong> — {error}
             </div>
@@ -383,6 +411,7 @@ export function App() {
               canRun={agentStatus?.canRun ?? false}
               payerReason={agentStatus?.reason}
               onTaskComplete={refresh}
+              onPayerBusyChange={setPayerBusy}
               onViewDeliverable={(jobId) => {
                 setLibraryJobId(jobId);
                 setTab("library");
@@ -474,8 +503,8 @@ export function App() {
               desc={
                 activityScope === "mine"
                   ? primaryPayerLabel
-                    ? `Agent & Marketplace only · wallet ${shortAddr(primaryPayerLabel)} · ${activityCountLabel}`
-                    : `Agent & Marketplace payments only · ${activityCountLabel}`
+                    ? `Agent & Auctions only · wallet ${shortAddr(primaryPayerLabel)} · ${activityCountLabel}`
+                    : `Agent & Auctions payments only · ${activityCountLabel}`
                   : `All x402 settlements on this Butler instance · ${activityCountLabel}`
               }
               className={activityScope === "mine" ? "activity-panel-mine" : ""}
@@ -522,11 +551,11 @@ export function App() {
                 <div className="activity-loading muted">Loading payments…</div>
               ) : activityRecords.length === 0 ? (
                 <EmptyState
-                  title={activityScope === "mine" ? "No Agent or Marketplace payments yet" : "No payments yet"}
+                  title={activityScope === "mine" ? "No Agent or Auctions payments yet" : "No payments yet"}
                   body={
                     activityScope === "mine"
                       ? canFilterMine
-                        ? "Mine shows tasks you run from the Agent tab or Marketplace. Dev probes, CLI runs, and older history stay under All."
+                        ? "Mine shows tasks you run from the Agent tab or Auctions. Dev probes, CLI runs, and older history stay under All."
                         : "Log in with Circle (Payer) to see activity tied to your wallet."
                       : "Run a task in Agent after logging in with Circle."
                   }
