@@ -5,6 +5,7 @@ import {
   type MarketplaceAgent,
   type MarketplaceCategory,
 } from "./marketplace.ts";
+import { isAgentApproved, requireAgentApproval } from "./agent-approvals.ts";
 
 export type AgentOrigin = "local" | "external";
 
@@ -57,17 +58,29 @@ function normalizeExternalAgent(agent: RegistryAgent): RegistryAgent {
   };
 }
 
-export function listMarketplaceAgents(opts?: { includeDisabled?: boolean }): RegistryAgent[] {
+export function listMarketplaceAgents(opts?: {
+  includeDisabled?: boolean;
+  includeUnapproved?: boolean;
+}): RegistryAgent[] {
   const local: RegistryAgent[] = MARKETPLACE_AGENTS.map((a) => ({ ...a, origin: "local" as const }));
   const remote = [...externalAgents, ...ephemeralAgents].filter((a) => opts?.includeDisabled || a.enabled !== false);
   const byId = new Map<string, RegistryAgent>();
   for (const a of local) byId.set(a.id, a);
   for (const a of remote) byId.set(a.id, a);
-  return [...byId.values()];
+  let agents = [...byId.values()];
+  if (!opts?.includeUnapproved && requireAgentApproval()) {
+    agents = agents.filter((a) => isAgentApproved(a.id));
+  }
+  return agents;
+}
+
+/** Agents that may bid, be paid, or appear in task catalogs. */
+export function listActiveMarketplaceAgents(): RegistryAgent[] {
+  return listMarketplaceAgents();
 }
 
 export function getMarketplaceAgent(id: string): RegistryAgent | undefined {
-  return listMarketplaceAgents({ includeDisabled: true }).find((a) => a.id === id);
+  return listMarketplaceAgents({ includeDisabled: true, includeUnapproved: true }).find((a) => a.id === id);
 }
 
 export function isExternalAgent(agent: Pick<RegistryAgent, "origin" | "serviceUrl">): boolean {

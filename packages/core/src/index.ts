@@ -7,6 +7,7 @@ export * from "./marketplace.ts";
 export * from "./marketplace-store.ts";
 export * from "./task-router.ts";
 export * from "./auction.ts";
+export * from "./agent-approvals.ts";
 export * from "./agent-registry.ts";
 
 import { getMarketplaceAgent as getFromRegistry } from "./agent-registry.ts";
