@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
-  getAgentRegistry,
   getMarketplaceAuction,
-  getMarketplaceAuctions,
   getMarketplaceDeliverable,
   type ReverseAuction,
 } from "../api.ts";
@@ -53,19 +51,9 @@ export function MarketplaceView({
   const [tab, setTab] = useState<MarketplaceTab>("auctions");
   const [createOpen, setCreateOpen] = useState(false);
   const [completionToast, setCompletionToast] = useState<TaskCompletionToastState | null>(null);
-  const [liveCount, setLiveCount] = useState(0);
-  const [agentCount, setAgentCount] = useState(0);
-  const [externalCount, setExternalCount] = useState(0);
 
-  const refreshStats = useCallback(async () => {
-    try {
-      const [auctions, registry] = await Promise.all([getMarketplaceAuctions(), getAgentRegistry()]);
-      setLiveCount(auctions.filter((a) => a.status === "open").length);
-      setAgentCount(registry.agents.length);
-      setExternalCount(registry.external);
-    } catch {
-      /* keep previous */
-    }
+  const refreshStats = useCallback(() => {
+    /* panels refresh themselves */
   }, []);
 
   const watchAuction = useCallback((auction: ReverseAuction) => {
@@ -108,18 +96,12 @@ export function MarketplaceView({
     });
   }, [refreshStats]);
 
-  useEffect(() => {
-    void refreshStats();
-    const id = setInterval(() => void refreshStats(), 8_000);
-    return () => clearInterval(id);
-  }, [refreshStats]);
-
   return (
     <div className="mp-page">
       <header className="mp-hero">
         <div className="mp-hero-copy">
           <p className="mp-eyebrow">x402 · Arc testnet</p>
-          <h1 className="mp-title">Marketplace</h1>
+          <h1 className="mp-title">Auctions</h1>
           <p className="mp-subtitle">
             Post a task. Agents bid down every few seconds. Payer agent discovers, negotiates, and settles automatically.
           </p>
@@ -130,29 +112,13 @@ export function MarketplaceView({
         </button>
       </header>
 
-      <div className="mp-stats" role="list">
-        <div className="mp-stat mp-stat-live" role="listitem">
-          <span className="mp-stat-value">{liveCount}</span>
-          <span className="mp-stat-label">Live auctions</span>
-        </div>
-        <div className="mp-stat" role="listitem">
-          <span className="mp-stat-value">{agentCount}</span>
-          <span className="mp-stat-label">Agents</span>
-        </div>
-        <div className="mp-stat mp-stat-open" role="listitem">
-          <span className="mp-stat-value">{externalCount}</span>
-          <span className="mp-stat-label">Open network</span>
-        </div>
-      </div>
-
-      <nav className="mp-tabs" aria-label="Marketplace sections">
+      <nav className="mp-tabs" aria-label="Auctions sections">
         <button
           type="button"
           className={`mp-tab ${tab === "auctions" ? "active" : ""}`}
           onClick={() => setTab("auctions")}
         >
-          Live auctions
-          {liveCount > 0 && <span className="mp-tab-badge">{liveCount}</span>}
+          Auctions
         </button>
         <button
           type="button"
@@ -165,7 +131,12 @@ export function MarketplaceView({
 
       <div className="mp-panel">
         {tab === "auctions" ? (
-          <AuctionPanel embedded onStatsChange={refreshStats} onCreateTask={() => setCreateOpen(true)} />
+          <AuctionPanel
+            embedded
+            onStatsChange={refreshStats}
+            onCreateTask={() => setCreateOpen(true)}
+            onViewDeliverable={onViewDeliverable}
+          />
         ) : (
           <OpenRegistryPanel onStatsChange={refreshStats} />
         )}

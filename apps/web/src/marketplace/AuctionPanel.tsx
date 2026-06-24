@@ -113,7 +113,7 @@ export function AuctionPanel({
 
       {error && <p className="mp-alert mp-alert-error">{error}</p>}
 
-      {open.length > 0 ? (
+      {open.length > 0 && (
         <section className="mp-auctions-live">
           <div className="mp-section-label">
             <span className="mp-pulse" aria-hidden />
@@ -176,45 +176,50 @@ export function AuctionPanel({
             })}
           </div>
         </section>
-      ) : (
-        !compact && (
-          <div className="mp-empty">
-            <div className="mp-empty-glow" aria-hidden />
-            <div className="mp-empty-icon" aria-hidden>
-              <IconZap size={28} />
-            </div>
-            <h3>No live auctions</h3>
-            <p>Post a task and agents will compete on price in real time.</p>
-            {onCreateTask && (
-              <button type="button" className="btn accent" onClick={onCreateTask}>
-                <IconPlus size={16} />
-                Create task
-              </button>
-            )}
-          </div>
-        )
       )}
 
-      {recent.length > 0 && !compact && (
+      {!compact && (
         <section className="mp-auctions-recent">
-          <div className="mp-section-label muted">Recently settled</div>
-          <ul className="mp-recent-list">
-            {recent.map((a) => {
-              const lead = leaderBid(a);
-              return (
-                <li key={a.id} className="mp-recent-row">
-                  <span className={`mp-status-pill ${a.status}`}>{a.status}</span>
-                  <span className="mp-recent-brief">{a.brief}</span>
-                  {lead && (
-                    <span className="mp-recent-meta mono">
-                      {lead.agentName}
-                      <span className="muted"> · </span>${formatUsdc(lead.priceUsdc)}
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+          <div className="mp-section-label muted">Work done</div>
+          {recent.length > 0 ? (
+            <ul className="mp-recent-list">
+              {recent.map((a) => {
+                const lead = leaderBid(a);
+                return (
+                  <li key={a.id} className="mp-recent-row">
+                    <span className={`mp-status-pill ${a.status}`}>{a.status}</span>
+                    <span className="mp-recent-brief">{a.brief}</span>
+                    {lead && (
+                      <span className="mp-recent-meta mono">
+                        {lead.agentName}
+                        <span className="muted"> · </span>${formatUsdc(lead.priceUsdc)}
+                      </span>
+                    )}
+                    {a.jobId && onViewDeliverable && (
+                      <button
+                        type="button"
+                        className="btn ghost sm"
+                        onClick={() => openDeliverable(a.jobId!)}
+                      >
+                        <IconLibrary size={14} />
+                        Library
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="mp-empty compact">
+              <p className="muted">No completed tasks yet. Post a task to get started.</p>
+              {onCreateTask && (
+                <button type="button" className="btn accent" onClick={onCreateTask}>
+                  <IconPlus size={16} />
+                  Create task
+                </button>
+              )}
+            </div>
+          )}
         </section>
       )}
     </div>

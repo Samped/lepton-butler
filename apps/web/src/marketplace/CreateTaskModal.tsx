@@ -162,7 +162,7 @@ export function CreateTaskModal({ open, initialBrief = "", onClose, onPosted, on
       >
         <header className="mp-create-header">
           <div className="mp-create-header-text">
-            <p className="mp-create-eyebrow">Marketplace</p>
+            <p className="mp-create-eyebrow">Auctions</p>
             <h2 id="create-task-title">Create task</h2>
           </div>
           <button type="button" className="mp-create-close" onClick={onClose} aria-label="Close">

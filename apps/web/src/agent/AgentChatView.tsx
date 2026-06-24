@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { resolveExpressBrief, resolveDeepWorkRouting } from "../brief-intent.ts";
 import {
   formatUsdc,
   getAgentPlannerStatus,
   getMarketplaceDeliverables,
   runPayerAgent,
   type AuctionMode,
+  type PayerAgentResult,
   type QualityTier,
 } from "../api.ts";
-import { payerResultToToast } from "../marketplace/CreateTaskModal.tsx";
+import { payerResultToToast, TaskCompletionToast, type TaskCompletionToastState } from "../marketplace/CreateTaskModal.tsx";
 import { formatWorkflowError } from "../format.ts";
 import { IconSend } from "../icons.tsx";
 
@@ -20,6 +22,7 @@ interface ChatMessage {
   meta?: string;
   deliverableId?: string;
   error?: boolean;
+  success?: boolean;
 }
 
 const STARTERS = [
@@ -55,11 +58,13 @@ export function AgentChatView({
   canRun,
   payerReason,
   onTaskComplete,
+  onPayerBusyChange,
   onViewDeliverable,
 }: {
   canRun: boolean;
   payerReason?: string;
   onTaskComplete?: () => void;
+  onPayerBusyChange?: (busy: boolean) => void;
   onViewDeliverable?: (jobId: string) => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -78,6 +83,7 @@ export function AgentChatView({
   const [configOpen, setConfigOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [plannerAi, setPlannerAi] = useState(false);
+  const [completionToast, setCompletionToast] = useState<TaskCompletionToastState | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -101,6 +107,10 @@ export function AgentChatView({
     setMessages((prev) => [...prev, { ...msg, id: crypto.randomUUID() }]);
   }, []);
 
+  useEffect(() => {
+    onPayerBusyChange?.(busy);
+  }, [busy, onPayerBusyChange]);
+
   const handleSubmit = async () => {
     const task = input.trim();
     if (!task || busy) return;
@@ -117,19 +127,23 @@ export function AgentChatView({
     setInput("");
     pushMessage({ role: "user", content: task });
     setBusy(true);
+    setCompletionToast(null);
 
+    const express = resolveExpressBrief(task);
+    const deepWork = resolveDeepWorkRouting(task);
+    const effectiveTier = express ? ("brief" as QualityTier) : deepWork ? deepWork.qualityTier : qualityTier;
     const taskOptions = {
-      qualityTier,
+      qualityTier: effectiveTier,
       maxBudgetUsdc: maxBudgetUsdc.trim() || undefined,
-      auctionMode,
+      auctionMode: express ? ("single" as AuctionMode) : deepWork ? deepWork.auctionMode : auctionMode,
     };
 
     try {
       const result = await runPayerAgent({
         brief: task,
-        category,
+        category: express?.category ?? category,
         strategy: "auction",
-        ttlSeconds: qualityTier === "full" ? 90 : 60,
+        ttlSeconds: effectiveTier === "full" ? 25 : effectiveTier === "brief" ? 8 : 12,
         ...taskOptions,
       });
 
@@ -145,21 +159,32 @@ export function AgentChatView({
       const toast = payerResultToToast(result);
       const discover = result.phases?.find((p) => p.phase === "discover");
       const negotiate = result.phases?.find((p) => p.phase === "negotiate");
+      const settle = result.phases?.find((p) => p.phase === "settle");
+      const winner = settle?.winner ?? negotiate?.winner ?? result.phases?.find((p) => p.winner)?.winner;
       const bidCount = negotiate?.bids ?? result.auction?.bids?.length;
 
       if (result?.ok) {
+        setCompletionToast(toast);
         pushMessage({
           role: "assistant",
-          content: result.summary ?? toast.summary ?? "Task complete — deliverable saved to Library.",
+          content: [
+            winner
+              ? `✓ Task complete — ${winner.agentName} delivered for $${formatUsdc(winner.priceUsdc)} USDC.`
+              : "✓ Task complete — deliverable saved to Library.",
+            result.summary ? `\n${result.summary}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
           deliverableId: result.jobId,
           meta: [
-            `${QUALITY_LABEL[qualityTier]} · ${auctionMode === "etf" ? "ETF pipeline" : "Single agent"}`,
+            `${QUALITY_LABEL[effectiveTier]} · ${taskOptions.auctionMode === "etf" ? "ETF pipeline" : "Fast settle"}`,
             toast.meta,
             bidCount != null ? `${bidCount} bids` : discover?.message,
             result.mode ? `Paid via ${result.mode}` : undefined,
           ]
             .filter(Boolean)
             .join(" · "),
+          success: true,
         });
       } else {
         pushMessage({
@@ -185,6 +210,15 @@ export function AgentChatView({
           /* ignore */
         }
       }
+      if (recovered?.summary) {
+        setCompletionToast({
+          ok: true,
+          title: "Task complete",
+          brief: task,
+          jobId: recovered.jobId,
+          summary: recovered.summary,
+        });
+      }
       pushMessage({
         role: "assistant",
         content: recovered?.summary
@@ -192,6 +226,7 @@ export function AgentChatView({
           : errMsg,
         error: !recovered,
         deliverableId: recovered?.jobId,
+        success: !!recovered,
       });
     } finally {
       setBusy(false);
@@ -336,7 +371,7 @@ export function AgentChatView({
 
       <div className="agent-chat-messages" ref={scrollRef}>
         {messages.map((msg) => (
-          <div key={msg.id} className={`chat-bubble ${msg.role} ${msg.error ? "error" : ""}`}>
+          <div key={msg.id} className={`chat-bubble ${msg.role} ${msg.error ? "error" : ""} ${msg.success ? "success" : ""}`}>
             <div className="chat-bubble-body">{msg.content}</div>
             {msg.meta && <div className="chat-bubble-meta">{msg.meta}</div>}
             {msg.deliverableId && onViewDeliverable && (
@@ -355,8 +390,8 @@ export function AgentChatView({
             <div className="chat-bubble-body chat-typing">
               <span className="chat-typing-label">
                 {qualityTier === "full"
-                  ? "Running full thesis pipeline — auction + settlement. Keep this tab open (~1 minute)."
-                  : "Discovering agents, running auction, settling…"}
+                  ? "Running pipeline — paying agent via x402…"
+                  : "Paying agent and building deliverable…"}
               </span>
               <span />
               <span />
@@ -365,6 +400,16 @@ export function AgentChatView({
           </div>
         )}
       </div>
+
+      {completionToast && (
+        <div className="agent-toast-wrap">
+          <TaskCompletionToast
+            toast={completionToast}
+            onViewLibrary={onViewDeliverable}
+            onDismiss={() => setCompletionToast(null)}
+          />
+        </div>
+      )}
 
       {messages.length <= 1 && (
         <div className="agent-starters">
