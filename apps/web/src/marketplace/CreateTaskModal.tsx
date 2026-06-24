@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import {
   createMarketplaceAuction,
   formatUsdc,
-  getPayerAgentReadiness,
-  runPayerAgent,
+  getButlerReadiness,
+  runButler,
   type AuctionMode,
-  type PayerAgentResult,
+  type ButlerResult,
   type QualityTier,
   type ReverseAuction,
 } from "../api.ts";
@@ -17,10 +17,10 @@ export interface CreateTaskModalProps {
   initialBrief?: string;
   onClose: () => void;
   onPosted?: (auction: ReverseAuction) => void;
-  onPayerComplete?: (result: PayerAgentResult) => void;
+  onButlerComplete?: (result: ButlerResult) => void;
 }
 
-type SubmitMode = "bids" | "payer";
+type SubmitMode = "bids" | "butler";
 
 const QUALITY_OPTIONS: { id: QualityTier; label: string; sub: string }[] = [
   { id: "brief", label: "Brief", sub: "Headlines & quotes" },
@@ -38,30 +38,30 @@ const CATEGORIES = [
   { value: "bills", label: "Bills" },
 ];
 
-export function CreateTaskModal({ open, initialBrief = "", onClose, onPosted, onPayerComplete }: CreateTaskModalProps) {
+export function CreateTaskModal({ open, initialBrief = "", onClose, onPosted, onButlerComplete }: CreateTaskModalProps) {
   const [brief, setBrief] = useState("");
   const [category, setCategory] = useState("research");
   const [qualityTier, setQualityTier] = useState<QualityTier>("standard");
   const [maxBudgetUsdc, setMaxBudgetUsdc] = useState("");
   const [auctionMode, setAuctionMode] = useState<AuctionMode>("single");
-  const [mode, setMode] = useState<SubmitMode>("payer");
+  const [mode, setMode] = useState<SubmitMode>("butler");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [payerReady, setPayerReady] = useState<boolean | null>(null);
-  const [payerReason, setPayerReason] = useState<string | undefined>();
+  const [butlerReady, setButlerReady] = useState<boolean | null>(null);
+  const [butlerReason, setButlerReason] = useState<string | undefined>();
   const [progress, setProgress] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     if (initialBrief.trim()) setBrief(initialBrief);
-    void getPayerAgentReadiness()
+    void getButlerReadiness()
       .then((s) => {
-        setPayerReady(s.canRun);
-        setPayerReason(s.reason);
+        setButlerReady(s.canRun);
+        setButlerReason(s.reason);
       })
       .catch(() => {
-        setPayerReady(false);
-        setPayerReason("Could not check payer status");
+        setButlerReady(false);
+        setButlerReason("Could not check Butler status");
       });
   }, [open, initialBrief]);
 
@@ -114,13 +114,13 @@ export function CreateTaskModal({ open, initialBrief = "", onClose, onPosted, on
         return;
       }
 
-      if (!payerReady) {
-        setError(payerReason ?? "Configure Circle payer before running autonomous settlement");
+      if (!butlerReady) {
+        setError(butlerReason ?? "Configure Circle payer before running Butler");
         return;
       }
 
       setProgress("Discovering agents, running auction, settling…");
-      const result = await runPayerAgent({
+      const result = await runButler({
         brief: text,
         category,
         strategy: "auction",
@@ -129,11 +129,11 @@ export function CreateTaskModal({ open, initialBrief = "", onClose, onPosted, on
       });
       setProgress(null);
       if (!result?.ok) {
-        setError(result?.error ?? "Payer agent could not complete the request");
+        setError(result?.error ?? "Butler could not complete the request");
         return;
       }
       setBrief("");
-      onPayerComplete?.(result);
+      onButlerComplete?.(result);
       onClose();
     } catch (e) {
       setError(formatWorkflowError(e instanceof Error ? e.message : "Failed to create task"));
@@ -145,11 +145,11 @@ export function CreateTaskModal({ open, initialBrief = "", onClose, onPosted, on
 
   const submitLabel =
     submitting
-      ? mode === "payer"
+      ? mode === "butler"
         ? "Settling…"
         : "Posting…"
-      : mode === "payer"
-        ? "Run payer agent"
+      : mode === "butler"
+        ? "Run Butler"
         : "Post auction";
 
   return (
@@ -177,12 +177,12 @@ export function CreateTaskModal({ open, initialBrief = "", onClose, onPosted, on
             <button
               type="button"
               role="tab"
-              aria-selected={mode === "payer"}
-              className={`mp-create-segment-btn ${mode === "payer" ? "active" : ""}`}
-              onClick={() => setMode("payer")}
+              aria-selected={mode === "butler"}
+              className={`mp-create-segment-btn ${mode === "butler" ? "active" : ""}`}
+              onClick={() => setMode("butler")}
             >
               <IconZap size={15} />
-              <span>Payer agent</span>
+              <span>Butler</span>
             </button>
             <button
               type="button"
@@ -196,7 +196,7 @@ export function CreateTaskModal({ open, initialBrief = "", onClose, onPosted, on
             </button>
           </div>
           <p className="mp-create-mode-hint">
-            {mode === "payer"
+            {mode === "butler"
               ? "Autonomous discover → bid → pay → deliver to Library"
               : "Post an RFP and watch agents compete — award manually"}
           </p>
@@ -307,10 +307,10 @@ export function CreateTaskModal({ open, initialBrief = "", onClose, onPosted, on
             </div>
           </div>
 
-          {mode === "payer" && payerReady === false && payerReason && (
+          {mode === "butler" && butlerReady === false && butlerReason && (
             <div className="mp-create-banner warn">
               <span className="mp-create-banner-dot" />
-              {payerReason}
+              {butlerReason}
             </div>
           )}
           {progress && (
@@ -333,10 +333,10 @@ export function CreateTaskModal({ open, initialBrief = "", onClose, onPosted, on
           <button
             type="button"
             className="btn accent mp-create-submit"
-            disabled={submitting || !brief.trim() || (mode === "payer" && payerReady !== true)}
+            disabled={submitting || !brief.trim() || (mode === "butler" && butlerReady !== true)}
             onClick={() => void handleSubmit()}
           >
-            {mode === "payer" && !submitting && <IconZap size={16} />}
+            {mode === "butler" && !submitting && <IconZap size={16} />}
             {submitLabel}
           </button>
         </footer>
@@ -364,7 +364,7 @@ export interface TaskCompletionToastState {
   pending?: boolean;
 }
 
-export function payerResultToToast(result: PayerAgentResult): TaskCompletionToastState {
+export function butlerResultToToast(result: ButlerResult): TaskCompletionToastState {
   const winner = result?.phases?.find((p) => p.winner)?.winner;
   return {
     ok: result?.ok ?? false,
@@ -418,16 +418,22 @@ export function TaskCompletionToast({
   );
 }
 
-export function PayerAgentToast({
+/** @deprecated Use butlerResultToToast */
+export const payerResultToToast = butlerResultToToast;
+
+export function ButlerToast({
   result,
   onDismiss,
   onViewLibrary,
 }: {
-  result: PayerAgentResult;
+  result: ButlerResult;
   onDismiss?: () => void;
   onViewLibrary?: (jobId: string) => void;
 }) {
   return (
-    <TaskCompletionToast toast={payerResultToToast(result)} onDismiss={onDismiss} onViewLibrary={onViewLibrary} />
+    <TaskCompletionToast toast={butlerResultToToast(result)} onDismiss={onDismiss} onViewLibrary={onViewLibrary} />
   );
 }
+
+/** @deprecated Use ButlerToast */
+export const PayerAgentToast = ButlerToast;

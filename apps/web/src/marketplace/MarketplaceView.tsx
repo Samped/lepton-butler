@@ -9,7 +9,7 @@ import { AuctionPanel } from "./AuctionPanel.tsx";
 import {
   CreateTaskFab,
   CreateTaskModal,
-  payerResultToToast,
+  butlerResultToToast,
   TaskCompletionToast,
   type TaskCompletionToastState,
 } from "./CreateTaskModal.tsx";
@@ -103,7 +103,7 @@ export function MarketplaceView({
           <p className="mp-eyebrow">x402 · Arc testnet</p>
           <h1 className="mp-title">Auctions</h1>
           <p className="mp-subtitle">
-            Post a task. Agents bid down every few seconds. Payer agent discovers, negotiates, and settles automatically.
+            Post a task. Agents bid down every few seconds. Butler discovers, negotiates, and settles automatically.
           </p>
         </div>
         <button type="button" className="btn accent mp-hero-cta" onClick={() => setCreateOpen(true)}>
@@ -149,8 +149,8 @@ export function MarketplaceView({
           void refreshStats();
           watchAuction(auction);
         }}
-        onPayerComplete={(result) => {
-          setCompletionToast(payerResultToToast(result));
+        onButlerComplete={(result) => {
+          setCompletionToast(butlerResultToToast(result));
           void refreshStats();
         }}
       />
