@@ -117,13 +117,8 @@ code {
   width: 28px;
   height: 28px;
   border-radius: 7px;
-  background: linear-gradient(145deg, var(--accent) 0%, #059669 100%);
-  display: grid;
-  place-items: center;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: #022c22;
-  box-shadow: none;
+  object-fit: contain;
+  background: #fff;
   flex-shrink: 0;
 }
 
@@ -3299,12 +3294,9 @@ select.field-input {
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: linear-gradient(145deg, var(--accent), #059669);
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  color: #022c22;
-  box-shadow: 0 8px 24px var(--accent-glow);
+  object-fit: contain;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 .splash-spinner {
@@ -3730,7 +3722,75 @@ select.field-input {
   flex-shrink: 0;
 }
 
+.agent-attach-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.agent-attach-btn {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+}
+
+.agent-composer-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.agent-attach-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.agent-attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.2rem 0.35rem 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+}
+
+.agent-attach-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.agent-attach-chip-remove {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+}
+
+.agent-attach-chip-remove:hover {
+  color: var(--text);
+}
+
 .agent-chat-input {
+  width: 100%;
   flex: 1;
   resize: none;
   min-height: 40px;
@@ -4303,6 +4363,344 @@ select.field-input {
   white-space: pre-wrap;
   text-align: left;
   hyphens: none;
+}
+
+/* Security audit deliverables */
+.library-paper-sheet--audit .paper-title {
+  font-size: 1.35rem;
+}
+
+.audit-deliverable {
+  margin-bottom: 0;
+}
+
+.audit-contract-panel {
+  margin-bottom: 1.5rem;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fafafa;
+  overflow: hidden;
+}
+
+.audit-contract-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: #f4f4f5;
+  border-bottom: 1px solid #e4e4e7;
+}
+
+.audit-contract-panel-title {
+  margin: 0;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #71717a;
+}
+
+.audit-contract-name {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #3f3f46;
+  padding: 0.15rem 0.45rem;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 4px;
+}
+
+.audit-contract-scroll {
+  max-height: 11rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.audit-contract-code {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  line-height: 1.55;
+  color: #27272a;
+  white-space: pre;
+  tab-size: 2;
+}
+
+.audit-results .paper-section-title {
+  margin-top: 0;
+}
+
+.audit-executive-summary {
+  margin-bottom: 1rem;
+  text-align: left;
+  hyphens: none;
+}
+
+.audit-risk-level {
+  margin-bottom: 1rem;
+  text-align: left;
+}
+
+.audit-findings-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.audit-finding {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.audit-severity {
+  flex-shrink: 0;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  line-height: 1.3;
+}
+
+.audit-severity-critical {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.audit-severity-high {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+.audit-severity-medium {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.audit-severity-low {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.audit-severity-info {
+  background: #f4f4f5;
+  color: #52525b;
+  border: 1px solid #e4e4e7;
+}
+
+.audit-finding-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.audit-finding-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #18181b;
+}
+
+.audit-finding-detail {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: #3f3f46;
+}
+
+/* Utility bill deliverables */
+.library-paper-sheet--bill .paper-title {
+  font-size: 1.35rem;
+}
+
+.bill-deliverable {
+  margin-bottom: 0;
+}
+
+.bill-request-panel {
+  margin-bottom: 1.25rem;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fafafa;
+  overflow: hidden;
+}
+
+.bill-request-panel-head {
+  padding: 0.5rem 0.75rem;
+  background: #f4f4f5;
+  border-bottom: 1px solid #e4e4e7;
+}
+
+.bill-request-panel-title {
+  margin: 0;
+  font-family: var(--font-sans, system-ui, sans-serif);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #71717a;
+}
+
+.bill-request-scroll {
+  max-height: 5.5rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.bill-request-text {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: #3f3f46;
+  white-space: pre-wrap;
+}
+
+.bill-quote-card {
+  border: 1px solid #d4d4d8;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.bill-quote-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem;
+  background: linear-gradient(180deg, #fafafa 0%, #fff 100%);
+  border-bottom: 1px solid #e4e4e7;
+}
+
+.bill-quote-label {
+  margin: 0 0 0.2rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #71717a;
+}
+
+.bill-quote-provider {
+  margin: 0;
+  font-family: var(--paper-serif);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #18181b;
+  line-height: 1.3;
+}
+
+.bill-quote-amount-block {
+  text-align: right;
+}
+
+.bill-quote-amount {
+  display: block;
+  font-size: 1.75rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #18181b;
+  line-height: 1.1;
+}
+
+.bill-quote-due {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  color: #71717a;
+}
+
+.bill-line-items {
+  padding: 0.85rem 1.25rem 0.25rem;
+}
+
+.bill-line-items-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #71717a;
+}
+
+.bill-line-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.bill-line-items-table th,
+.bill-line-items-table td {
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #f4f4f5;
+  text-align: left;
+  vertical-align: top;
+}
+
+.bill-line-items-table thead th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #71717a;
+  border-bottom-color: #e4e4e7;
+}
+
+.bill-col-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bill-line-items-table tfoot th,
+.bill-line-items-table tfoot td {
+  border-bottom: none;
+  padding-top: 0.65rem;
+  font-weight: 600;
+  color: #18181b;
+}
+
+.bill-total {
+  font-size: 1rem;
+}
+
+.bill-quote-notes {
+  padding: 0.85rem 1.25rem 1rem;
+  background: #fafafa;
+  border-top: 1px solid #e4e4e7;
+}
+
+.bill-notes-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #71717a;
+}
+
+.bill-notes-text {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: #52525b;
 }
 
 .paper-inline-meta {
