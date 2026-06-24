@@ -8,10 +8,11 @@ import {
   type MarketplaceJobStep,
   type SpendInitiator,
 } from "@butler/core";
-import { circleCliLoggedIn, circleGatewayBalanceUsdc, circleServicesPay, ensureCircleExecutor } from "./circle-cli.ts";
+import { circleCliLoggedIn, circleServicesPay, ensureCircleExecutor, getGatewayBalanceForApi } from "./circle-cli.ts";
 import { resolveCircleExecutorAddress } from "./circle-config.ts";
 import { formatPaymentError } from "./payment-errors.ts";
 import { validateExternalAgent } from "./external-agent-registry.ts";
+import { isAgentApproved } from "@butler/core";
 import { appendServiceUrlParams } from "./x402-probe.ts";
 import { combineWorkflowResult } from "./deliverable-combine.ts";
 import { stashWorkflowContext } from "./context-store.ts";
@@ -65,7 +66,7 @@ async function payAndFetch(
     (process.env.BUTLER_USE_CIRCLE_CLI === "true" || (circleCliLoggedIn() && !!circleAddr));
 
   if (useCircle && circleAddr) {
-    const balance = circleGatewayBalanceUsdc(circleAddr);
+    const balance = getGatewayBalanceForApi(circleAddr);
     if (balance === "0" || balance === "0.0" || balance === "0.00") {
       return {
         ok: false,
@@ -115,6 +116,7 @@ async function payAndFetch(
 
 function assertAgentPayable(agent: ReturnType<typeof getMarketplaceAgent>): string | null {
   if (!agent) return "Unknown agent";
+  if (!isAgentApproved(agent.id)) return "Agent is not approved";
   if (isExternalAgent(agent)) {
     return validateExternalAgent(agent);
   }

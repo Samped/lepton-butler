@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   inferCategoryFromCapabilities,
+  isAgentApproved,
   registerExternalAgents,
   registerEphemeralAgents,
   slugFromUrl,
@@ -45,7 +46,7 @@ function parsePolicy(): ExternalAgentPolicy {
     domainAllowlist,
     maxPriceUsdc: Number(process.env.BUTLER_EXTERNAL_MAX_PRICE_USDC ?? "0.25") || 0.25,
     baselineReputation: Number(process.env.BUTLER_EXTERNAL_BASELINE_REPUTATION ?? "72") || 72,
-    openDiscovery: process.env.BUTLER_OPEN_DISCOVERY !== "false",
+    openDiscovery: process.env.BUTLER_OPEN_DISCOVERY === "true",
     requireX402Verified: process.env.BUTLER_EXTERNAL_REQUIRE_X402 !== "false",
   };
 }
@@ -67,6 +68,9 @@ export function isPriceAllowed(priceUsdc: string, policy = parsePolicy()): boole
 }
 
 export function validateExternalAgent(agent: RegistryAgent, policy = parsePolicy()): string | null {
+  if (!isAgentApproved(agent.id)) {
+    return "Agent is not approved — approve it in Auctions → Agent network before payment";
+  }
   if (!agent.serviceUrl?.startsWith("http")) return "serviceUrl must be absolute http(s) URL";
   let hostname: string;
   try {
@@ -265,10 +269,11 @@ export async function discoverOpenAgents(
   }
 
   if (opts?.ephemeral && discovered.length > 0) {
-    registerEphemeralAgents(discovered);
+    const approved = discovered.filter((a) => isAgentApproved(a.id));
+    if (approved.length > 0) registerEphemeralAgents(approved);
   }
 
-  return discovered;
+  return discovered.filter((a) => isAgentApproved(a.id));
 }
 
 export function agentToRegistryEntry(agent: RegistryAgent): RegistryFileEntry {

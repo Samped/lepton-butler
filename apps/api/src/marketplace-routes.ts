@@ -1,4 +1,5 @@
 import type { Express, Response } from "express";
+import { dirname, resolve } from "node:path";
 import { formatUnits } from "viem";
 import type { createGatewayMiddleware } from "@circle-fin/x402-batching/server";
 import {
@@ -8,8 +9,14 @@ import {
   getAgentCredits,
   getMarketplaceAgent,
   getMarketplaceEtf,
+  getApprovedAgentIds,
+  initAgentApprovals,
   initializeAuction,
+  isAgentApproved,
   listMarketplaceAgents,
+  requireAgentApproval,
+  etfAgentsApproved,
+  setAgentApproved,
   loadMarketplaceState,
   loadState,
   defaultAuctionMode,
@@ -241,6 +248,10 @@ export function registerMarketplaceRoutes(
   const { gateway, apiBase, statePath, policyStatePath, sellerAddress } = opts;
 
   const registryPath = getRegistryPath();
+  const approvalsPath =
+    process.env.BUTLER_AGENT_APPROVALS_PATH?.trim() ||
+    resolve(dirname(statePath), "agent-approvals.json");
+  initAgentApprovals(approvalsPath);
   loadExternalAgentRegistry({ registryPath });
 
   function loadMp() {
@@ -371,6 +382,7 @@ export function registerMarketplaceRoutes(
     res.json(
       listMarketplaceAgents().map((agent) => ({
         ...agent,
+        approved: true,
         credit: creditMap.get(agent.id),
         quote: buildQuoteForAgent(agent, creditMap.get(agent.id)!, apiBase),
         serviceUrl: resolveAgentServiceUrl(agent, apiBase),
@@ -400,16 +412,49 @@ export function registerMarketplaceRoutes(
 
   app.get("/api/marketplace/registry", (_req, res) => {
     const policy = getExternalAgentPolicy();
-    const agents = listMarketplaceAgents();
+    const agents = listMarketplaceAgents({ includeUnapproved: true, includeDisabled: true });
+    const approvedIds = getApprovedAgentIds(approvalsPath);
     res.json({
-      policy,
+      policy: { ...policy, requireAgentApproval: requireAgentApproval() },
       registryPath,
+      approvalsPath,
+      approvedCount: approvedIds.size,
       agents: agents.map((a) => ({
         ...a,
         serviceUrl: resolveAgentServiceUrl(a, apiBase),
+        approved: isAgentApproved(a.id, approvalsPath),
       })),
       local: agents.filter((a) => a.origin !== "external").length,
       external: agents.filter((a) => a.origin === "external").length,
+    });
+  });
+
+  app.get("/api/marketplace/registry/approvals", (_req, res) => {
+    res.json({
+      requireAgentApproval: requireAgentApproval(),
+      approvalsPath,
+      approvedAgentIds: [...getApprovedAgentIds(approvalsPath)],
+    });
+  });
+
+  app.post("/api/marketplace/registry/approvals", (req, res) => {
+    const agentId = String(req.body?.agentId ?? "").trim();
+    if (!agentId) {
+      res.status(400).json({ error: "agentId required" });
+      return;
+    }
+    const agent = getMarketplaceAgent(agentId);
+    if (!agent) {
+      res.status(404).json({ error: "Unknown agent" });
+      return;
+    }
+    const approved = req.body?.approved !== false;
+    const ids = setAgentApproved(agentId, approved, approvalsPath);
+    res.json({
+      ok: true,
+      agentId,
+      approved: ids.has(agentId),
+      approvedAgentIds: [...ids],
     });
   });
 
@@ -475,7 +520,7 @@ export function registerMarketplaceRoutes(
   });
 
   app.get("/api/marketplace/etfs", (_req, res) => {
-    res.json(MARKETPLACE_ETFS);
+    res.json(MARKETPLACE_ETFS.filter((etf) => etfAgentsApproved(etf.agentIds, approvalsPath)));
   });
 
   app.get("/api/marketplace/credits", (_req, res) => {
