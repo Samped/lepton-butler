@@ -1,4 +1,5 @@
 import { unwrapAgentPayload } from "./format.ts";
+import { isUtilityBillPayload } from "./bill.ts";
 
 function appendUnique<T>(existing: T[] | undefined, incoming: T[]): T[] {
   return [...(existing ?? []), ...incoming];
@@ -65,10 +66,23 @@ export function combineWorkflowResult(steps: { output?: unknown }[]): Record<str
     if (p.type === "macro" || typeof p.fedOutlook === "string") combined.macro = p;
     if (p.type === "onchain" || Array.isArray(p.signals)) combined.onchain = p;
     if (p.type === "risk" || typeof p.riskScore === "number") combined.risk = p;
-    if (typeof p.contract === "string") {
+    if (typeof p.contract === "string" || p.type === "audit" || Array.isArray(p.findings)) {
+      combined.type = "audit";
       combined.contract = p.contract;
       combined.findings = p.findings;
+      combined.summary = p.summary ?? combined.summary;
       combined.riskLevel = p.riskLevel;
+      if (typeof p.sourceCode === "string") combined.sourceCode = p.sourceCode;
+      if (typeof p.brief === "string") combined.brief = p.brief;
+    }
+    if (isUtilityBillPayload(p)) {
+      combined.type = "utility-bill";
+      combined.provider = p.provider;
+      combined.amountDue = p.amountDue;
+      combined.dueDate = p.dueDate;
+      combined.lineItems = p.lineItems;
+      combined.notes = p.notes;
+      if (typeof p.brief === "string") combined.brief = p.brief;
     }
   }
 
