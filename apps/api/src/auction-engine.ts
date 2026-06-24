@@ -78,7 +78,7 @@ async function resumeAwardedWorkflow(
       apiBase: opts.apiBase,
       job,
       forceX402: opts.forceX402,
-      initiator: auction.payerAgentOwned ? "user" : "system",
+      initiator: (auction.butlerOwned ?? auction.payerAgentOwned) ? "user" : "system",
     });
     const finalized = finalizeCompletedJob(job, result);
     const completed = finalized.status === "completed";
@@ -128,7 +128,7 @@ function expireOrphanedAuctions(auctions: ReverseAuction[], now = Math.floor(Dat
   let changed = false;
   const next = auctions.map((a) => {
     if (a.status !== "open" || a.deadlineAt >= now) return a;
-    if (!a.payerAgentOwned || now - a.deadlineAt < STALE_PAYER_AUCTION_SECS) return a;
+    if (!(a.butlerOwned ?? a.payerAgentOwned) || now - a.deadlineAt < STALE_PAYER_AUCTION_SECS) return a;
     changed = true;
     return {
       ...a,
@@ -138,7 +138,7 @@ function expireOrphanedAuctions(auctions: ReverseAuction[], now = Math.floor(Dat
         {
           at: now,
           kind: "cancelled" as const,
-          message: "Auction expired — payer agent did not settle in time",
+          message: "Auction expired — Butler did not settle in time",
         },
       ],
     };
@@ -156,7 +156,7 @@ export function processMarketplaceAuctions(
   const toAward: string[] = [];
   const auctions = base.auctions.map((auction) => {
     const tick = processAuctionTick(auction, credits, now);
-    if (tick.needsAward && !auction.payerAgentOwned) toAward.push(tick.auction.id);
+    if (tick.needsAward && !(auction.butlerOwned ?? auction.payerAgentOwned)) toAward.push(tick.auction.id);
     return tick.auction;
   });
   return { state: { ...base, auctions }, toAward };
@@ -233,7 +233,7 @@ export async function executeAuctionAward(opts: {
       apiBase: opts.apiBase,
       job,
       forceX402: opts.forceX402,
-      initiator: auction.payerAgentOwned ? "user" : "system",
+      initiator: (auction.butlerOwned ?? auction.payerAgentOwned) ? "user" : "system",
     });
 
     const finalized = finalizeCompletedJob(job, result);
