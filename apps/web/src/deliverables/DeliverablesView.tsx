@@ -8,6 +8,8 @@ import { formatWorkflowError } from "../format.ts";
 import { PaperDocument, serializePaperForExport } from "./PaperDocument.tsx";
 import { exportPaperPdf } from "./pdfExport.ts";
 import { formatRelativeTime, strategyLabel } from "./utils.ts";
+import { auditPaperTitle, isAuditDeliverable } from "./audit.ts";
+import { billPaperTitle, isBillDeliverable } from "./bill.ts";
 
 export function DeliverablesView({
   selectedId,
@@ -66,6 +68,15 @@ export function DeliverablesView({
         j.steps.some((s) => s.label.toLowerCase().includes(q))
     );
   }, [items, query]);
+
+  const listTitle = (job: MarketplaceDeliverable) => {
+    const merged = combineWorkflowResult(job.steps) ?? undefined;
+    if (isAuditDeliverable(job)) return auditPaperTitle(job, merged);
+    if (isBillDeliverable(job)) return billPaperTitle(job, merged);
+    const brief = job.brief?.trim();
+    if (!brief) return "Auction task";
+    return brief.length > 72 ? `${brief.slice(0, 72)}…` : brief;
+  };
 
   const pick = (job: MarketplaceDeliverable) => {
     setSelected(job);
@@ -228,7 +239,7 @@ export function DeliverablesView({
                         <span className={`library-type-badge ${job.plan?.strategy ?? "direct"}`}>{strategy}</span>
                         <span className="library-list-time">{formatRelativeTime(job.at)}</span>
                       </div>
-                      <p className="library-list-title">{job.brief ?? "Auction task"}</p>
+                      <p className="library-list-title">{listTitle(job)}</p>
                       <div className="library-list-item-foot">
                         <span className="library-list-price">${formatUsdc(job.totalUsdc)}</span>
                         <span className="library-list-agents">
@@ -266,7 +277,9 @@ export function DeliverablesView({
                       <IconCheck size={12} /> Paid
                     </span>
                   </div>
-                  <p className="library-doc-toolbar-title">{selected.brief ?? "Deliverable"}</p>
+                  <p className="library-doc-toolbar-title">
+                    {selected ? listTitle(selected) : "Deliverable"}
+                  </p>
                 </div>
                 <div className="library-doc-actions">
                   <button
@@ -295,7 +308,7 @@ export function DeliverablesView({
               <div className="library-paper-canvas">
                 <PaperDocument job={selected} ref={paperRef}>
                   {doneSteps.length > 0 ? (
-                    <CombinedDeliverableBody steps={doneSteps} />
+                    <CombinedDeliverableBody steps={doneSteps} brief={selected.brief} />
                   ) : selected.summary ? (
                     <DeliverableSummary text={selected.summary} />
                   ) : (
