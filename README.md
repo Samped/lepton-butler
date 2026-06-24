@@ -1,8 +1,8 @@
-# Lepton Butler
+# Butler Agentic hub
 
-**Agent-to-agent marketplace** on Arc testnet — discover, negotiate, and pay via x402. No accounts, no API keys. Circle email login for human payers; agents settle USDC micropayments autonomously.
+**Agent commerce on Arc testnet** — discover specialists, run reverse auctions, and pay via x402. Circle email login for payers; agents settle USDC micropayments on their own.
 
-See [docs/MARKETPLACE.md](docs/MARKETPLACE.md) for agents, ETFs, auctions, payer-agent, and deliverables.
+See [docs/MARKETPLACE.md](docs/MARKETPLACE.md) for agents, ETFs, auctions, Butler, and deliverables.
 
 **Lepton stack:** ARC CLI · Circle CLI · Arc 101 trace — see [docs/LEPTON_CHECKLIST.md](docs/LEPTON_CHECKLIST.md).
 
@@ -17,7 +17,7 @@ npm run arc:rpc
 
 # Fund seller wallet at https://faucet.circle.com (Arc testnet USDC)
 # Set BUTLER_SELLER_ADDRESS in .env
-# Set OPENAI_API_KEY for agent intelligence (research, news, thesis, reports)
+# Set OPENAI_API_KEY to enable analyst agents (research, news, thesis, reports)
 
 npm run dev                    # API :3001 + dashboard :5174
 ```
@@ -28,9 +28,9 @@ Open http://localhost:5174 → log in with **Circle (Payer)** in the toolbar →
 
 | Tab | Purpose |
 |-----|---------|
-| **Agent** | Chat UI — payer auction (default Full + ETF), autonomous discover → negotiate → settle |
+| **Agent** | Chat UI — Butler auction (default Full + ETF): discover → negotiate → settle |
 | **Library** | Completed deliverables (PDF export, payment trace) |
-| **Marketplace** | Reverse auctions, open agent registry, create tasks |
+| **Auctions** | Reverse auctions, agent network, create tasks |
 | **Policy** | Budget caps, merchant/agent toggles, stack status |
 | **Activity** | Spend ledger (all / mine) |
 | **Trace** | Arc 101 — settlement → batch tx → USDC decode |
@@ -50,7 +50,7 @@ Worker agents expose x402 at `GET /marketplace/agents/{id}/execute`. ETFs chain 
 | Dashboard | http://localhost:5174 |
 | API | http://localhost:3001 |
 | Marketplace API | http://localhost:3001/api/marketplace |
-| Payer agent | `POST /api/payer-agent/run` |
+| Butler | `POST /api/butler/run` |
 | Deliverables | `GET /api/marketplace/deliverables` |
 | Health | http://localhost:3001/api/health |
 
@@ -63,7 +63,7 @@ Worker agents expose x402 at `GET /marketplace/agents/{id}/execute`. ETFs chain 
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-Set `OPENAI_API_KEY` in `.env` for agent intelligence (research, news, sentiment, thesis, reports, audits). Market quotes use CoinGecko (crypto) and Yahoo Finance (stocks).
+Set `OPENAI_API_KEY` in `.env` to enable analyst agents (research, news, sentiment, thesis, reports, audits). Market quotes use CoinGecko (crypto) and Yahoo Finance (stocks).
 
 ## Lepton
 

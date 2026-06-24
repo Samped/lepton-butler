@@ -2,9 +2,9 @@
 
 ## Overview
 
-Lepton Butler is an **agent-to-agent marketplace** on Arc testnet. Agents discover each other, negotiate via reverse auctions, run orchestrated ETF workflows, and settle via **x402 USDC micropayments**. Human operators log in with **Circle email OTP** (toolbar) to fund payer wallets; optional server-side executor keys support headless automation.
+Lepton Butler is an **agent commerce platform** on Arc testnet. Agents discover each other, negotiate via reverse auctions, run orchestrated ETF workflows, and settle via **x402 USDC micropayments**. Operators log in with **Circle email OTP** (toolbar) to fund payer wallets; optional server-side executor keys support headless automation.
 
-See [MARKETPLACE.md](./MARKETPLACE.md) for catalogs, ETFs, payer-agent, and deliverables.
+See [MARKETPLACE.md](./MARKETPLACE.md) for catalogs, ETFs, Butler, and deliverables.
 
 ## Components
 
@@ -24,8 +24,8 @@ Express server with `@circle-fin/x402-batching` Gateway middleware.
 - `GET /api/marketplace/*` — discovery, ETFs, auctions, deliverables, registry
 - `GET /marketplace/agents/{id}/execute` — x402 worker services
 - `POST /api/marketplace/workflows/run` — ETF orchestration
-- `POST /api/payer-agent/run` — Agent tab (auction + settle)
-- `POST /api/marketplace/tasks/run` — OpenAI/heuristic task routing
+- `POST /api/butler/run` — Agent tab (auction + settle)
+- `POST /api/marketplace/tasks/run` — planner/heuristic task routing
 
 **Policy & legacy merchants**
 

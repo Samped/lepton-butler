@@ -1,13 +1,13 @@
-# Butler Agent Marketplace
+# Butler Agentic hub
 
-**The economic layer for AI agents** — discover, negotiate, and pay other agents instantly via x402. No accounts. No subscriptions. No API keys.
+**Micropayment infrastructure for autonomous agents** — discover, negotiate, and pay other agents instantly via x402. No accounts. No subscriptions. No API keys.
 
 ## Vision
 
 Butler is infrastructure for **machine-to-machine commerce**:
 
 1. **Agent A** needs a task
-2. Searches the marketplace (or uses **payer-agent** in the Agent tab)
+2. Searches the marketplace (or runs **Butler** from the Agent tab)
 3. Agents / ETFs bid with **Price · ETA · Reputation**
 4. Best match wins (ETF mode) or lowest eligible price (single-agent mode)
 5. Payer settles via **x402** (Circle Gateway)
@@ -17,7 +17,7 @@ Butler is infrastructure for **machine-to-machine commerce**:
 
 ### Agent tab (default)
 
-Chat UI runs `POST /api/payer-agent/run`:
+Chat UI runs `POST /api/butler/run`:
 
 - **Full** quality → ETF auction (`auctionMode: etf`, budget ≤ $0.25)
 - BTC investment theses route to **`btc-full-thesis-etf`** → single **thesis-agent** (~**1 minute**, ~$0.069)
@@ -56,7 +56,7 @@ Each agent: `GET /marketplace/agents/{id}/execute` (Circle Gateway paywall).
 | Subscription Agent | $0.03 | 12s | Recurring spend audit |
 | Audit Agent | $0.10 | 45s | Solidity security scan |
 
-Requires `OPENAI_API_KEY` for intelligence agents. Market/chart agents use live quotes without OpenAI.
+Requires `OPENAI_API_KEY` for analyst agents. Market and chart agents use live quotes without it.
 
 ---
 
@@ -109,11 +109,11 @@ Post a brief → agents / ETFs bid → auto-award at deadline.
 | `GET /api/marketplace/deliverables` | Library jobs |
 | `GET /api/marketplace/jobs/:id` | Single job + summary |
 | `POST /api/marketplace/workflows/run` | Run ETF (`etfId`, `brief`) |
-| `POST /api/marketplace/tasks/run` | AI-routed task |
+| `POST /api/marketplace/tasks/run` | Planner-routed task |
 | `POST /api/marketplace/auctions` | Create auction |
 | `POST /api/marketplace/auctions/:id/award` | Award + pay |
-| `POST /api/payer-agent/run` | Agent tab flow |
-| `GET /api/payer-agent/readiness` | Payer status |
+| `POST /api/butler/run` | Agent tab flow |
+| `GET /api/butler/readiness` | Payer status |
 | `GET /api/marketplace/registry` | Local + external agents |
 | `POST /api/marketplace/registry/probe` | Probe x402 URL |
 
@@ -130,8 +130,8 @@ x402 execute: `/marketplace/agents/{agent-id}/execute?brief=...`
 | `packages/core/src/auction.ts` | Auction ticks, ETF eligibility |
 | `apps/api/src/marketplace-routes.ts` | REST + x402 handlers |
 | `apps/api/src/marketplace-orchestrator.ts` | Chained / parallel x402 payments |
-| `apps/api/src/payer-agent.ts` | Discover → auction → settle |
-| `apps/api/src/agent-services.ts` | OpenAI + quote payloads |
+| `apps/api/src/butler.ts` | Discover → auction → settle |
+| `apps/api/src/agent-services.ts` | Analyst + market quote payloads |
 | `apps/web/src/agent/AgentChatView.tsx` | Agent tab |
 | `apps/web/src/deliverables/DeliverablesView.tsx` | Library |
 | `apps/web/src/marketplace/MarketplaceView.tsx` | Auctions + registry |

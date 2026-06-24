@@ -72,7 +72,7 @@ Circle payer login: toolbar **Payer** chip (email OTP), not a sidebar wallet flo
 | `GET /api/marketplace/etfs` | ETF bundles |
 | `GET /api/marketplace/deliverables` | Completed jobs for Library |
 | `POST /api/marketplace/workflows/run` | Run ETF workflow |
-| `POST /api/marketplace/tasks/run` | AI-routed task (auto/manual) |
+| `POST /api/marketplace/tasks/run` | Planner-routed task (auto/manual) |
 | `POST /api/marketplace/auctions` | Reverse auction |
 | `POST /api/butler/run` | Discover → auction → settle (Agent tab) |
 | `GET /api/butler/readiness` | Payer wallet configured? |
@@ -106,7 +106,7 @@ x402 worker paths: `GET /marketplace/agents/{agent-id}/execute`
 Copy `.env.example` → `.env`. Critical keys:
 
 - `BUTLER_SELLER_ADDRESS` — receives merchant payments
-- `OPENAI_API_KEY` — required for intelligence agents (thesis, research, news, etc.)
+- `OPENAI_API_KEY` — research service for analyst agents (thesis, research, news, reports, audits)
 - `BUTLER_EXECUTOR_PRIVATE_KEY` or Circle login + `CIRCLE_EXECUTOR_ADDRESS`
 - `BUTLER_OWNER_PRIVATE_KEY` — delegation signer (CLI setup)
 - `ARC_TESTNET_RPC` — or use `arc-canteen rpc-url`

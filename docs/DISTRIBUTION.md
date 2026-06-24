@@ -19,7 +19,7 @@ Butler is that layer — with **human-in-the-loop delegation** so users retain a
 | **Machine-readable paywalls** | x402 on `/merchants/*` and `/marketplace/agents/*/execute` |
 | **Agent wallets** | Circle CLI agent wallets; Gateway deposit |
 | **Budget / policy** | `packages/core` — daily caps, merchant allowlist |
-| **Autonomous purchase** | Agent tab (`/api/payer-agent/run`), ETFs, auctions |
+| **Autonomous purchase** | Agent tab (`/api/butler/run`), ETFs, auctions |
 | **Deliverables** | Library — `GET /api/marketplace/deliverables` |
 | **Settlement trace** | Activity ledger + Arc 101 Trace tab |
 | **Creator payout** | `BUTLER_SELLER_ADDRESS` receives USDC per settlement |

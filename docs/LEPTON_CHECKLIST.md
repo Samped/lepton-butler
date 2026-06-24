@@ -175,5 +175,5 @@ Butler maps to Distribution Bootstrap primitives — see [docs/DISTRIBUTION.md](
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — delegation + policy flows
 - [DISTRIBUTION.md](./DISTRIBUTION.md) — Distribution Bootstrap alignment
-- [../AGENTS.md](../AGENTS.md) — arc-canteen agent context for AI assistants
+- [../AGENTS.md](../AGENTS.md) — arc-canteen agent context for local development
 - [../README.md](../README.md) — quick start
