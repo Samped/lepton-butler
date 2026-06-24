@@ -19,20 +19,20 @@ export function formatWorkflowError(raw: string): string {
   }
   if (/invalid response from|unexpected response from/i.test(text)) {
     if (/\/api\/(health|policy|ledger|agent\/status)/i.test(text)) {
-      return "API is busy with a payer run — this is normal. Check Library for your deliverable; the dashboard will refresh when the run finishes.";
+      return "API is busy with a Butler run — this is normal. Check Library for your deliverable; the dashboard will refresh when the run finishes.";
     }
-    return "Lost connection to the API during the payer run. Check Library — the job may still finish in the background.";
+    return "Lost connection to the API during the Butler run. Check Library — the job may still finish in the background.";
   }
   if (/request timed out/i.test(text)) {
     if (/\/api\/(health|policy)/i.test(text)) {
-      return "API is busy with a payer run — health check timed out. Your task may still complete in Library.";
+      return "API is busy with a Butler run — health check timed out. Your task may still complete in Library.";
     }
-    if (/payer-agent/i.test(text)) {
-      return "Payer run is still processing (auctions + x402 can take 3–5 minutes). Check Library in a moment — your deliverable may already be there.";
+    if (/butler|payer-agent/i.test(text)) {
+      return "Butler is still processing (auctions + x402 can take 3–5 minutes). Check Library in a moment — your deliverable may already be there.";
     }
   }
   if (/signal is aborted/i.test(text)) {
-    return "Request was cancelled or timed out. Keep this tab open while the payer agent runs (auctions can take 1–3 minutes).";
+    return "Request was cancelled or timed out. Keep this tab open while Butler runs (auctions can take 1–3 minutes).";
   }
   const short = text.split(/Common causes:|Technical details:/i)[0]?.trim() ?? text;
   return short.length > 220 ? `${short.slice(0, 217)}...` : short;
