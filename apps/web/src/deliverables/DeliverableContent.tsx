@@ -2,6 +2,17 @@ import type { CSSProperties, ReactNode } from "react";
 import { AGENT_COLORS, agentInitials } from "./utils.ts";
 import { unwrapAgentPayload } from "./format.ts";
 import { combineWorkflowResult } from "./combine.ts";
+import {
+  auditSeverityClass,
+  contractNameFromSource,
+  resolveAuditContractSource,
+} from "./audit.ts";
+import {
+  billRequestText,
+  formatBillCurrency,
+  formatBillDueDate,
+  isUtilityBillPayload,
+} from "./bill.ts";
 
 function ReportBlock({ data }: { data: Record<string, unknown> }) {
   const report = data.report as Record<string, unknown> | undefined;
@@ -203,25 +214,65 @@ function SentimentBlock({ data }: { data: Record<string, unknown> }) {
   );
 }
 
-function AuditBlock({ data }: { data: Record<string, unknown> }) {
-  if (typeof data.contract !== "string") return null;
-  const findings = Array.isArray(data.findings) ? data.findings : [];
+function AuditContractPanel({ source }: { source: string }) {
+  const name = contractNameFromSource(source);
   return (
-    <section className="paper-section">
-      <h2 className="paper-section-title">Security Audit</h2>
-      <p className="paper-inline-meta mono">{data.contract}</p>
-      {data.riskLevel != null && (
-        <p className="paper-prose">
-          <strong>Risk level:</strong> {String(data.riskLevel)}
-        </p>
-      )}
-      {findings.length > 0 && (
-        <ol className="paper-numbered-list">
-          {findings.map((f, i) => (
-            <li key={i}>{typeof f === "object" ? JSON.stringify(f) : String(f)}</li>
-          ))}
-        </ol>
-      )}
+    <div className="audit-contract-panel">
+      <div className="audit-contract-panel-head">
+        <h3 className="audit-contract-panel-title">Contract under review</h3>
+        {name ? <span className="audit-contract-name">{name}</span> : null}
+      </div>
+      <div className="audit-contract-scroll" tabIndex={0} aria-label="Solidity source code">
+        <pre className="audit-contract-code">{source}</pre>
+      </div>
+    </div>
+  );
+}
+
+function AuditBlock({
+  data,
+  contractSource,
+}: {
+  data: Record<string, unknown>;
+  contractSource?: string | null;
+}) {
+  if (data.type !== "audit" && typeof data.contract !== "string" && !Array.isArray(data.findings)) return null;
+  const findings = Array.isArray(data.findings) ? (data.findings as Record<string, unknown>[]) : [];
+  const contractName = typeof data.contract === "string" ? data.contract : "Smart contract";
+  const source = contractSource ?? resolveAuditContractSource(undefined, data);
+
+  return (
+    <section className="paper-section audit-deliverable">
+      {source ? <AuditContractPanel source={source} /> : null}
+
+      <div className="audit-results">
+        <h2 className="paper-section-title">Findings — {contractName}</h2>
+        {typeof data.summary === "string" && (
+          <p className="paper-prose audit-executive-summary">{data.summary}</p>
+        )}
+        {data.riskLevel != null && (
+          <p className="paper-prose audit-risk-level">
+            <strong>Overall risk:</strong> {String(data.riskLevel)}
+          </p>
+        )}
+        {findings.length > 0 && (
+          <ol className="audit-findings-list">
+            {findings.map((f, i) => (
+              <li key={i} className="audit-finding">
+                {f.severity ? (
+                  <span className={`audit-severity ${auditSeverityClass(f.severity)}`}>
+                    {String(f.severity).toUpperCase()}
+                  </span>
+                ) : null}
+                <div className="audit-finding-body">
+                  <p className="audit-finding-title">{String(f.title ?? "Finding")}</p>
+                  {f.detail ? <p className="audit-finding-detail">{String(f.detail)}</p> : null}
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
     </section>
   );
 }
@@ -283,6 +334,91 @@ function OnchainBlock({ data }: { data: Record<string, unknown> }) {
           </ul>
         </>
       )}
+    </section>
+  );
+}
+
+function BillRequestPanel({ text }: { text: string }) {
+  return (
+    <div className="bill-request-panel">
+      <div className="bill-request-panel-head">
+        <h3 className="bill-request-panel-title">Your request</h3>
+      </div>
+      <div className="bill-request-scroll" tabIndex={0} aria-label="Bill quote request">
+        <p className="bill-request-text">{text}</p>
+      </div>
+    </div>
+  );
+}
+
+function BillBlock({
+  data,
+  requestText,
+}: {
+  data: Record<string, unknown>;
+  requestText?: string | null;
+}) {
+  if (!isUtilityBillPayload(data)) return null;
+
+  const provider = String(data.provider ?? "Utility provider");
+  const amountDue = formatBillCurrency(data.amountDue);
+  const dueDate = formatBillDueDate(data.dueDate);
+  const lineItems = Array.isArray(data.lineItems) ? (data.lineItems as Record<string, unknown>[]) : [];
+  const request = requestText ?? billRequestText(undefined, data);
+
+  return (
+    <section className="paper-section bill-deliverable">
+      {request ? <BillRequestPanel text={request} /> : null}
+
+      <div className="bill-quote-card">
+        <header className="bill-quote-header">
+          <div>
+            <p className="bill-quote-label">Estimated bill</p>
+            <h2 className="bill-quote-provider">{provider}</h2>
+          </div>
+          <div className="bill-quote-amount-block">
+            <span className="bill-quote-amount">{amountDue}</span>
+            <span className="bill-quote-due">Due {dueDate}</span>
+          </div>
+        </header>
+
+        {lineItems.length > 0 && (
+          <div className="bill-line-items">
+            <h3 className="bill-line-items-title">Line items</h3>
+            <table className="bill-line-items-table">
+              <thead>
+                <tr>
+                  <th scope="col">Charge</th>
+                  <th scope="col" className="bill-col-amount">
+                    Amount
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {lineItems.map((item, i) => (
+                  <tr key={i}>
+                    <td>{String(item.label ?? "Charge")}</td>
+                    <td className="bill-col-amount">{formatBillCurrency(item.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th scope="row">Total due</th>
+                  <td className="bill-col-amount bill-total">{amountDue}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+
+        {typeof data.notes === "string" && data.notes.trim() && (
+          <footer className="bill-quote-notes">
+            <p className="bill-notes-label">Notes & assumptions</p>
+            <p className="bill-notes-text">{data.notes}</p>
+          </footer>
+        )}
+      </div>
     </section>
   );
 }
@@ -357,7 +493,12 @@ function renderPayload(data: Record<string, unknown>) {
   if (Array.isArray(data.papers)) blocks.push(<ResearchBlock key="research" data={data} />);
   if (typeof data.score === "number" && typeof data.label === "string")
     blocks.push(<SentimentBlock key="sentiment" data={data} />);
-  if (typeof data.contract === "string") blocks.push(<AuditBlock key="audit" data={data} />);
+  if (typeof data.contract === "string" || data.type === "audit" || Array.isArray(data.findings)) {
+    blocks.push(<AuditBlock key="audit" data={data} contractSource={resolveAuditContractSource(undefined, data)} />);
+  }
+  if (isUtilityBillPayload(data)) {
+    blocks.push(<BillBlock key="bill" data={data} requestText={billRequestText(undefined, data)} />);
+  }
   if (data.type === "technical-analysis" || (typeof data.pattern === "string" && !Array.isArray(data.papers))) {
     blocks.push(<ChartBlock key="chart" data={data} />);
   }
@@ -402,11 +543,20 @@ function RiskBlock({ data }: { data: Record<string, unknown> }) {
 }
 
 /** One unified document from all agent step outputs (no per-agent section headers). */
-export function CombinedDeliverableBody({ steps }: { steps: { output?: unknown }[] }) {
+export function CombinedDeliverableBody({
+  steps,
+  brief,
+}: {
+  steps: { output?: unknown }[];
+  brief?: string;
+}) {
   const merged = combineWorkflowResult(steps);
   if (!merged) {
     return <p className="paper-prose paper-empty">No structured output was stored for this job.</p>;
   }
+
+  const contractSource = resolveAuditContractSource(brief, merged);
+  const billRequest = billRequestText(brief, merged);
 
   const onchain = merged.onchain as Record<string, unknown> | undefined;
   const defi = merged.defi as Record<string, unknown> | undefined;
@@ -432,7 +582,12 @@ export function CombinedDeliverableBody({ steps }: { steps: { output?: unknown }
   if (macro) blocks.push(<MacroBlock key="macro" data={macro} />);
   if (Array.isArray(merged.papers)) blocks.push(<ResearchBlock key="research" data={merged} />);
   if (risk) blocks.push(<RiskBlock key="risk" data={risk} />);
-  if (typeof merged.contract === "string") blocks.push(<AuditBlock key="audit" data={merged} />);
+  if (typeof merged.contract === "string" || merged.type === "audit" || Array.isArray(merged.findings)) {
+    blocks.push(<AuditBlock key="audit" data={merged} contractSource={contractSource} />);
+  }
+  if (isUtilityBillPayload(merged)) {
+    blocks.push(<BillBlock key="bill" data={merged} requestText={billRequest} />);
+  }
 
   return (
     <div className="paper-sections paper-unified">
