@@ -1,6 +1,6 @@
 /** Browser-safe copy — keep in sync with packages/core/src/brief-intent.ts */
 
-export type ExpressCategory = "news" | "market-data" | "sentiment" | "research";
+export type ExpressCategory = "news" | "market-data" | "sentiment" | "research" | "audit" | "bills";
 
 export interface ExpressBrief {
   category: ExpressCategory;
@@ -41,7 +41,7 @@ export function isHeadlineOnlyBrief(brief: string): boolean {
 
 export function isResearchLiteratureBrief(brief: string): boolean {
   const t = brief.toLowerCase();
-  if (wantsDeepBrief(brief)) return false;
+  if (wantsDeepBrief(brief) || isSoliditySourceBrief(brief)) return false;
   const wantsLiterature =
     /academic|literature review|industry research|key papers?|papers?\/themes|themes and limitations|research on\b|research summary|survey of|state of the art|macro hedge/.test(
       t
@@ -60,12 +60,41 @@ export function isChartOnlyBrief(brief: string): boolean {
   return wantsChart && !wantsDeepBrief(brief);
 }
 
+export function isSoliditySourceBrief(brief: string): boolean {
+  return /pragma\s+solidity/i.test(brief) && /contract\s+\w+/i.test(brief);
+}
+
+export function isAuditOnlyBrief(brief: string): boolean {
+  if (wantsDeepBrief(brief)) return false;
+  const t = brief.toLowerCase();
+  if (isSoliditySourceBrief(brief)) return true;
+  return (
+    /\baudit\b|security audit|vulnerabilit|slither|smart contract audit|contract audit|solidity audit|security scan/.test(
+      t
+    ) && /solidity|smart contract|\bcontract\b|reentrancy|vulnerable|pragma/.test(t)
+  );
+}
+
+export function isBillOnlyBrief(brief: string): boolean {
+  if (wantsDeepBrief(brief)) return false;
+  const t = brief.toLowerCase();
+  if (isSoliditySourceBrief(brief) || isAuditOnlyBrief(brief)) return false;
+  return (
+    /utility bill|electricity bill|energy bill|gas bill|water bill|invoice quote|bill quote|monthly bill/.test(t) ||
+    (/\bbill\b/.test(t) && /utility|electric|energy|kwh|pg&e|pge|provider|due date/.test(t))
+  );
+}
+
 export function isOnchainOnlyBrief(brief: string): boolean {
+  if (isAuditOnlyBrief(brief) || isSoliditySourceBrief(brief)) return false;
   const t = brief.toLowerCase();
   const wantsOnchain =
     /on[- ]?chain|whale|exchange inflow|exchange outflow|exchange flows?|large transfers?|holder trends?|network activity/.test(
       t
-    ) || ((/inflow|outflow/.test(t) || /transfers?/.test(t)) && /exchange|btc|eth|sol|crypto|whale/.test(t));
+    ) ||
+    ((/inflow|outflow/.test(t) || /\btransfer(s)?\b/.test(t)) &&
+      /\b(exchange|btc|bitcoin|eth|ethereum|solana|crypto|whale)\b/.test(t) &&
+      !/pragma\s+solidity|smart contract/.test(t));
   return wantsOnchain && !wantsDeepBrief(brief) && !isChartOnlyBrief(brief);
 }
 
@@ -85,6 +114,12 @@ export function isSentimentOnlyBrief(brief: string): boolean {
 }
 
 export function resolveExpressBrief(brief: string): ExpressBrief | null {
+  if (isAuditOnlyBrief(brief)) {
+    return { category: "audit", agentId: "audit-agent", label: "contract audit" };
+  }
+  if (isBillOnlyBrief(brief)) {
+    return { category: "bills", agentId: "bill-agent", label: "utility bill quote" };
+  }
   if (isHeadlineOnlyBrief(brief)) {
     return { category: "news", agentId: "news-agent", label: "headlines" };
   }
