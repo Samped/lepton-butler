@@ -23,7 +23,7 @@ packages/core/       Policy, marketplace catalog, auctions, ledger (.data/*)
 packages/arc/        Chain constants, Gateway, resolveArcRpc()
 packages/delegation/ ERC-7710 TS (build, redeem, deploy)
 packages/contracts/  ButlerSpendEnforcer.sol
-apps/api/            Express + x402 + marketplace + payer-agent + trace
+apps/api/            Express + x402 + marketplace + Butler + trace
 apps/web/            React dashboard (Agent, Library, Marketplace, Policy, Activity, Trace)
 apps/agent/          CLI orchestrator
 apps/delegation/     delegation CLI (deploy, setup, pay)
@@ -47,7 +47,7 @@ npm run arc:rpc          # Arc RPC from arc-canteen
 
 | Tab | What it does |
 |-----|----------------|
-| **Agent** | Default. Chat + payer-agent auction (Full tier → ETF pipeline). ~1 min for BTC full thesis. |
+| **Agent** | Default. Chat + Butler auction (Full tier → ETF pipeline). ~1 min for BTC full thesis. |
 | **Library** | `GET /api/marketplace/deliverables` — completed jobs, PDF export |
 | **Marketplace** | Auctions, open x402 registry, manual task creation |
 | **Policy** | Budget, merchants, agents, Lepton stack panel |
@@ -74,8 +74,8 @@ Circle payer login: toolbar **Payer** chip (email OTP), not a sidebar wallet flo
 | `POST /api/marketplace/workflows/run` | Run ETF workflow |
 | `POST /api/marketplace/tasks/run` | AI-routed task (auto/manual) |
 | `POST /api/marketplace/auctions` | Reverse auction |
-| `POST /api/payer-agent/run` | Discover → auction → settle (Agent tab) |
-| `GET /api/payer-agent/readiness` | Payer configured? |
+| `POST /api/butler/run` | Discover → auction → settle (Agent tab) |
+| `GET /api/butler/readiness` | Payer wallet configured? |
 | `GET /api/settlement/:id` | Arc 101 — Gateway transfer |
 | `GET /api/batch-tx/:id` | Settlement → batch tx |
 | `GET /api/decode-batch/:hash` | Batch tx USDC decode |
