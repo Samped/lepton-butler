@@ -76,9 +76,11 @@ export function combineWorkflowResult(steps: { output?: unknown }[]): Record<str
     if (p.type === "macro" || typeof p.fedOutlook === "string") combined.macro = p;
     if (p.type === "onchain" || Array.isArray(p.signals)) combined.onchain = p;
     if (p.type === "risk" || typeof p.riskScore === "number") combined.risk = p;
-    if (typeof p.contract === "string") {
+    if (typeof p.contract === "string" || p.type === "audit" || Array.isArray(p.findings)) {
+      combined.type = "audit";
       combined.contract = p.contract;
       combined.findings = p.findings;
+      combined.summary = p.summary ?? combined.summary;
       combined.riskLevel = p.riskLevel;
     }
   }
