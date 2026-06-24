@@ -1,14 +1,7 @@
-import {
-  getMarketplaceAgent,
-  listMarketplaceAgents,
-  type AgentCreditScore,
-  type AuctionBid,
-  type AuctionEvent,
-  type MarketplaceCategory,
-  type QualityTier,
-  type ReverseAuction,
-} from "./agent-registry.ts";
-import { buildQuote, MARKETPLACE_ETFS, pickAuctionWinner, scoreEtfForBrief } from "./marketplace.ts";
+import { isHeadlineOnlyBrief, isChartOnlyBrief, isOnchainOnlyBrief, isResearchLiteratureBrief, resolveExpressBrief, wantsDeepBrief } from "./brief-intent.ts";
+import { getMarketplaceAgent, listMarketplaceAgents, type AgentCreditScore } from "./agent-registry.ts";
+import { etfAgentsApproved } from "./agent-approvals.ts";
+import { buildQuote, MARKETPLACE_ETFS, pickAuctionWinner, scoreEtfForBrief, type AuctionBid, type AuctionEvent, type MarketplaceCategory, type QualityTier, type ReverseAuction } from "./marketplace.ts";
 
 export { scoreEtfForBrief } from "./marketplace.ts";
 
@@ -28,7 +21,14 @@ const BID_POOLS: Record<string, MarketplaceCategory[]> = {
 
 /** Agent IDs allowed per quality tier (standard = use category pool only). */
 const QUALITY_TIER_AGENTS: Record<QualityTier, string[] | null> = {
-  brief: ["news-agent", "market-agent", "chart-agent", "sentiment-agent", "onchain-agent"],
+  brief: [
+    "news-agent",
+    "market-agent",
+    "chart-agent",
+    "sentiment-agent",
+    "onchain-agent",
+    "research-agent",
+  ],
   standard: null,
   full: ["research-agent", "report-agent", "macro-agent", "defi-agent"],
 };
@@ -43,13 +43,35 @@ function bidWithinBudget(priceUsdc: string, maxBudgetUsdc?: string): boolean {
 export function etfsEligibleForAuction(
   auction: Pick<ReverseAuction, "brief" | "category" | "maxBudgetUsdc" | "qualityTier">
 ) {
+  if (resolveExpressBrief(auction.brief)) return [];
+
   const t = auction.brief.toLowerCase();
   const tier = auction.qualityTier ?? "standard";
+
+  if (wantsDeepBrief(auction.brief)) {
+    if (/investment thesis/.test(t) && /btc|bitcoin/.test(t)) {
+      return MARKETPLACE_ETFS.filter(
+        (etf) =>
+          etfAgentsApproved(etf.agentIds) &&
+          bidWithinBudget(etf.bundlePriceUsdc, auction.maxBudgetUsdc) &&
+          (etf.id === "btc-full-thesis-etf" || etf.id === "deep-dive-etf")
+      );
+    }
+    return MARKETPLACE_ETFS.filter(
+      (etf) =>
+        etfAgentsApproved(etf.agentIds) &&
+        bidWithinBudget(etf.bundlePriceUsdc, auction.maxBudgetUsdc) &&
+        etf.id === "deep-dive-etf"
+    );
+  }
+
   const wantsBtcThesis =
+    !isResearchLiteratureBrief(auction.brief) &&
     /btc|bitcoin/.test(t) &&
     /thesis|investment|bull|bear|whale|on-chain|onchain|defi|support|resistance|executive|deep|comprehensive|scenario/.test(t);
 
   return MARKETPLACE_ETFS.filter((etf) => {
+    if (!etfAgentsApproved(etf.agentIds)) return false;
     if (!bidWithinBudget(etf.bundlePriceUsdc, auction.maxBudgetUsdc)) return false;
     if (tier === "brief") return false;
     if (auction.category === "audit") return etf.agentIds.includes("audit-agent");
@@ -81,18 +103,25 @@ export function etfsEligibleForAuction(
 }
 
 export function agentsEligibleForAuction(
-  auction: Pick<ReverseAuction, "category" | "minReputation" | "qualityTier" | "auctionMode">,
+  auction: Pick<ReverseAuction, "category" | "minReputation" | "qualityTier" | "auctionMode" | "brief">,
   credits: Map<string, AgentCreditScore>
 ) {
   if (auction.auctionMode === "etf") return [];
 
-  const pool = BID_POOLS[auction.category] ?? [auction.category as MarketplaceCategory];
+  const express = resolveExpressBrief(auction.brief);
+  const pool = express
+    ? [express.agentId]
+    : (BID_POOLS[auction.category] ?? [auction.category as MarketplaceCategory]);
   const tier = auction.qualityTier ?? "standard";
   const tierAgents = QUALITY_TIER_AGENTS[tier];
 
   return listMarketplaceAgents().filter((agent) => {
-    if (!pool.includes(agent.category)) return false;
-    if (tierAgents && !tierAgents.includes(agent.id)) return false;
+    if (express) {
+      if (agent.id !== express.agentId) return false;
+    } else if (!pool.includes(agent.category)) {
+      return false;
+    }
+    if (tierAgents && !express && !tierAgents.includes(agent.id)) return false;
     const score = credits.get(agent.id)?.score ?? 0;
     return score >= auction.minReputation;
   });
@@ -410,19 +439,29 @@ export function initializeAuction(params: {
   return competitive.auction;
 }
 
+/** Headlines-only tasks should not run multi-agent ETF pipelines. */
+export { isHeadlineOnlyBrief, isChartOnlyBrief, isOnchainOnlyBrief, isResearchLiteratureBrief, resolveExpressBrief, resolveDeepWorkRouting, wantsDeepBrief } from "./brief-intent.ts";
+
 export function inferAuctionCategory(brief: string): MarketplaceCategory {
   const t = brief.toLowerCase();
-  const wantsDeepResearch = /research|paper|papers|report|investment thesis|deep dive|analysis|comprehensive|due diligence/.test(
-    t
-  );
+  const express = resolveExpressBrief(brief);
+  if (express) return express.category;
+
+  const wantsDeepResearch =
+    /research paper|papers|report|investment thesis|deep dive|comprehensive|due diligence/.test(t) ||
+    (/research/.test(t) && !/technical analysis|chart analysis/.test(t)) ||
+    (/analysis/.test(t) && !/technical analysis|chart analysis|sentiment analysis/.test(t));
   if (/audit|security|contract|solidity|slither/.test(t)) return "audit";
   if (/bill|subscription|utility|invoice|recurring/.test(t)) return "bills";
   if (/defi|yield|tvl|uniswap|aave|liquidity pool/.test(t)) return "market-data";
   if (/macro|fed\b|rates|cpi|inflation|economy/.test(t)) return "research";
-  if (/onchain|on-chain|whale|exchange flow|holder/.test(t)) return "market-data";
+  if (/onchain|on-chain|whale|exchange inflow|exchange outflow|exchange flows?|large transfers?|holder/.test(t))
+    return "market-data";
   if (/competitor|moat|market share|vs\.|versus/.test(t)) return "research";
-  if (/risk|hedge|drawdown|volatility/.test(t)) return "reporting";
+  if (/risk|hedge|drawdown|volatility/.test(t) && !/macro hedge|academic|literature|research on|industry research/.test(t))
+    return "reporting";
   if (/report|investment thesis|synthesize|briefing|full report/.test(t)) return "reporting";
+  if (/technical analysis|chart analysis|\brsi\b|support.*resistance/.test(t)) return "market-data";
   if (!wantsDeepResearch && /price|market|\bstock\b|crypto|btc|eth|nvda|quote/.test(t)) return "market-data";
   if (/news|headline|headlines/.test(t)) return "news";
   if (/sentiment|social|bullish|bearish/.test(t)) return "sentiment";
@@ -434,6 +473,9 @@ export function resolveTaskCategory(
   userCategory?: MarketplaceCategory,
   qualityTier?: QualityTier
 ): MarketplaceCategory {
+  const express = resolveExpressBrief(brief);
+  if (express) return express.category;
+  if (isHeadlineOnlyBrief(brief)) return "news";
   const cat = userCategory ?? inferAuctionCategory(brief);
   if (qualityTier === "full" && (cat === "research" || cat === "news" || cat === "market-data")) {
     return "reporting";
