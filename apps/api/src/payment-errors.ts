@@ -17,6 +17,13 @@ export function formatPaymentError(raw: string): string {
     return "Payment endpoint timed out. Confirm the API is running (npm run dev:api) and your network can reach Circle Gateway.";
   }
   if (/payment submitted but request failed/i.test(text)) {
+    const server = text.match(/Server response:\s*([^\n]+)/i)?.[1]?.trim();
+    if (server) {
+      if (/agent disabled/i.test(server)) {
+        return "Audit/bill agent blocked by policy (broker role disabled). Update Policy to enable bills agent, then retry.";
+      }
+      return `Payment settled but the agent service rejected the request: ${server}`;
+    }
     return "Agent payment succeeded but the service returned an error (often OpenAI timeout or a long workflow step). Retry, or check API logs.";
   }
   if (/configure circle login|payer address not set|payer not configured/i.test(text)) {
