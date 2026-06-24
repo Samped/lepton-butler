@@ -1,4 +1,4 @@
-import type { Express, Response } from "express";
+import type { Express, Request, Response } from "express";
 import { dirname, resolve } from "node:path";
 import { formatUnits } from "viem";
 import type { createGatewayMiddleware } from "@circle-fin/x402-batching/server";
@@ -55,7 +55,7 @@ import {
 import { enrichSpendPayer, spendInitiatorFromMarketplaceQuery } from "./ledger-payer.ts";
 import { readWorkflowContext } from "./context-store.ts";
 import { agentRunReadiness } from "./agent-runner.ts";
-import { runPayerAgent } from "./payer-agent.ts";
+import { runButler } from "./butler.ts";
 import {
   getExternalAgentPolicy,
   loadExternalAgentRegistry,
@@ -103,6 +103,11 @@ interface AgentServiceDef {
 }
 
 function briefFrom(req: PaidRequest): string {
+  const briefContextId = String(req.query.briefContextId ?? "").trim();
+  if (briefContextId) {
+    const ctx = readWorkflowContext(briefContextId);
+    if (ctx.trim()) return ctx;
+  }
   return String(req.query.brief ?? "");
 }
 
@@ -173,7 +178,7 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     price: "$0.10",
     merchantId: "utility-quote",
     category: "bills",
-    policyAgent: "broker",
+    policyAgent: "bills",
     etaSeconds: 45,
     payload: (req) => buildAuditPayload(briefFrom(req), String(req.query.contract ?? "")),
   },
@@ -872,23 +877,23 @@ export function registerMarketplaceRoutes(
     }
   });
 
-  // --- Autonomous payer agent (discover → negotiate → settle) ---
-  app.get("/api/payer-agent/readiness", (_req, res) => {
+  // --- Butler orchestrator (discover → negotiate → settle) ---
+  const butlerReadiness = (_req: Request, res: Response) => {
     res.json(agentRunReadiness());
-  });
+  };
 
-  app.post("/api/payer-agent/run", async (req, res) => {
+  const butlerRun = async (req: Request, res: Response) => {
     const brief = String(req.body?.brief ?? "").trim();
     if (!brief) {
       res.status(400).json({ error: "brief required" });
       return;
     }
     if (!!req.body?.dryRun) {
-      res.status(400).json({ error: "dryRun is disabled — payer agent executes real x402 payments" });
+      res.status(400).json({ error: "dryRun is disabled — Butler executes real x402 payments" });
       return;
     }
     try {
-      const result = await runPayerAgent({
+      const result = await runButler({
         brief,
         apiBase,
         statePath,
@@ -905,14 +910,19 @@ export function registerMarketplaceRoutes(
       if (!result?.ok) {
         const unavailable =
           result?.error?.includes("Payer not configured") || result?.error?.includes("Circle");
-        res.status(unavailable ? 503 : 200).json(result ?? { ok: false, error: "Payer agent returned no result" });
+        res.status(unavailable ? 503 : 200).json(result ?? { ok: false, error: "Butler returned no result" });
         return;
       }
       res.json(result);
     } catch (e) {
-      res.status(500).json({ error: e instanceof Error ? e.message : "Payer agent failed" });
+      res.status(500).json({ error: e instanceof Error ? e.message : "Butler failed" });
     }
-  });
+  };
+
+  app.get("/api/butler/readiness", butlerReadiness);
+  app.post("/api/butler/run", butlerRun);
+  app.get("/api/payer-agent/readiness", butlerReadiness);
+  app.post("/api/payer-agent/run", butlerRun);
 
   return startAuctionEngine({ statePath, sellerAddress, apiBase });
 }
