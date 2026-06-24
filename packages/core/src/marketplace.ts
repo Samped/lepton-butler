@@ -1,6 +1,6 @@
 /** Butler Agent Marketplace — agent-to-agent commerce via x402 (no accounts, no API keys). */
 
-import { isHeadlineOnlyBrief, isChartOnlyBrief, isOnchainOnlyBrief, isResearchLiteratureBrief, resolveExpressBrief, wantsDeepBrief } from "./brief-intent.ts";
+import { isHeadlineOnlyBrief, isChartOnlyBrief, isAuditOnlyBrief, isOnchainOnlyBrief, isResearchLiteratureBrief, resolveExpressBrief, wantsDeepBrief } from "./brief-intent.ts";
 
 export type MarketplaceCategory =
   | "research"
@@ -134,7 +134,9 @@ export interface ReverseAuction {
   lastRoundAt?: number;
   /** Seconds between automated undercut rounds. */
   bidIntervalSeconds?: number;
-  /** Payer-agent run owns award/settlement — background engine must not auto-award. */
+  /** Butler run owns award/settlement — background engine must not auto-award. */
+  butlerOwned?: boolean;
+  /** @deprecated Use butlerOwned */
   payerAgentOwned?: boolean;
   events?: AuctionEvent[];
 }
@@ -266,7 +268,7 @@ export const MARKETPLACE_AGENTS: MarketplaceAgent[] = [
     priceUsdc: "0.10",
     etaSeconds: 45,
     merchantId: "utility-quote",
-    policyAgent: "broker",
+    policyAgent: "bills",
     capabilities: ["solidity", "slither", "gas-review"],
   },
   {
@@ -516,6 +518,11 @@ export function scoreEtfForBrief(
 
   if (isOnchainOnlyBrief(brief)) {
     if (etf.agentIds.length === 1 && etf.agentIds[0] === "onchain-agent") score += 50;
+    else score -= 80;
+  }
+
+  if (isAuditOnlyBrief(brief)) {
+    if (etf.agentIds.length === 1 && etf.agentIds[0] === "audit-agent") score += 50;
     else score -= 80;
   }
 
