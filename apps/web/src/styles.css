@@ -3471,23 +3471,6 @@ select.field-input {
   color: var(--accent);
 }
 
-.agent-planner-chip {
-  font-size: 0.625rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-  padding: 0.25rem 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-}
-
-.agent-planner-chip.on {
-  color: var(--violet);
-  border-color: rgba(139, 92, 246, 0.35);
-  background: rgba(139, 92, 246, 0.1);
-}
-
 .agent-config-panel {
   padding: 0.75rem 0.875rem;
   border-bottom: 1px solid var(--border);
@@ -4091,11 +4074,6 @@ select.field-input {
 .library-type-badge.direct {
   background: var(--accent-muted);
   color: var(--accent-hover);
-}
-
-.library-type-badge.ai {
-  background: rgba(139, 92, 246, 0.12);
-  color: var(--violet);
 }
 
 .library-list-time {

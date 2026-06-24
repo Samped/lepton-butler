@@ -272,7 +272,6 @@ export function DeliverablesView({
                     <span className={`library-type-badge lg ${selected.plan?.strategy ?? "direct"}`}>
                       {strategyLabel(selected.plan?.strategy)}
                     </span>
-                    {selected.plan?.router === "openai" && <span className="library-type-badge lg ai">AI routed</span>}
                     <span className="library-doc-paid">
                       <IconCheck size={12} /> Paid
                     </span>

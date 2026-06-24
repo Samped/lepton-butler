@@ -389,7 +389,7 @@ export function TaskCompletionToast({
   return (
     <div className={`mp-toast ${toast.ok ? "success" : toast.pending ? "pending" : "error"}`} role="status">
       <div className="mp-toast-head">
-        <span className="mp-toast-icon">{toast.pending ? "…" : toast.ok ? "✓" : "!"}</span>
+        <span className="mp-toast-icon">{toast.pending ? "…" : toast.ok ? "Done" : "!"}</span>
         <div>
           <strong>{toast.title}</strong>
           <span className="muted mp-toast-brief">{toast.brief}</span>

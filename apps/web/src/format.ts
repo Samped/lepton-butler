@@ -34,6 +34,9 @@ export function formatWorkflowError(raw: string): string {
   if (/signal is aborted/i.test(text)) {
     return "Request was cancelled or timed out. Keep this tab open while Butler runs (auctions can take 1–3 minutes).";
   }
+  if (/OPENAI_API_KEY|openai api|agent intelligence/i.test(text)) {
+    return "A specialist agent is not configured on this server. Contact your operator to enable research and report services.";
+  }
   const short = text.split(/Common causes:|Technical details:/i)[0]?.trim() ?? text;
   return short.length > 220 ? `${short.slice(0, 217)}...` : short;
 }

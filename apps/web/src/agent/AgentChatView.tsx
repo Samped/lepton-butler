@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { resolveExpressBrief, resolveDeepWorkRouting } from "../brief-intent.ts";
 import {
   formatUsdc,
-  getAgentPlannerStatus,
   getMarketplaceDeliverables,
   runButler,
   type AuctionMode,
@@ -92,7 +91,7 @@ export function AgentChatView({
       id: "welcome",
       role: "assistant",
       content:
-        "Describe what you need. I'll discover agents, run a competitive auction, and settle the best bid automatically — full BTC theses deliver in about a minute.",
+        "Describe the work you need done. Butler will match agents, run the auction, and settle payment automatically. Full research reports typically arrive in Library within a minute.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -102,15 +101,10 @@ export function AgentChatView({
   const [auctionMode, setAuctionMode] = useState<AuctionMode>("etf");
   const [configOpen, setConfigOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [plannerAi, setPlannerAi] = useState(false);
   const [completionToast, setCompletionToast] = useState<TaskCompletionToastState | null>(null);
   const [attachment, setAttachment] = useState<AttachedDocument | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    void getAgentPlannerStatus().then((p) => setPlannerAi(p.enabled));
-  }, []);
 
   useEffect(() => {
     if (qualityTier === "full") {
@@ -227,8 +221,8 @@ export function AgentChatView({
           role: "assistant",
           content: [
             winner
-              ? `✓ Task complete — ${winner.agentName} delivered for $${formatUsdc(winner.priceUsdc)} USDC.`
-              : "✓ Task complete — deliverable saved to Library.",
+              ? `Task complete — ${winner.agentName} delivered for $${formatUsdc(winner.priceUsdc)} USDC.`
+              : "Task complete — deliverable saved to Library.",
             result.summary ? `\n${result.summary}` : "",
           ]
             .filter(Boolean)
@@ -321,12 +315,6 @@ export function AgentChatView({
           >
             {configOpen ? "Hide config" : "Configure agent"}
           </button>
-          <span
-            className={`agent-planner-chip ${plannerAi ? "on" : ""}`}
-            title={plannerAi ? "OpenAI category routing active" : "Keyword routing (set OPENAI_API_KEY on API)"}
-          >
-            {plannerAi ? "AI routing" : "Keyword routing"}
-          </span>
         </div>
       </div>
 

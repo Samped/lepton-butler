@@ -555,7 +555,7 @@ export interface TaskPlan {
   reason: string;
   estimatedUsdc: string;
   etaSeconds: number;
-  router?: "openai" | "heuristic";
+  router?: "planner" | "heuristic";
 }
 
 export interface AgentPlannerStatus {
