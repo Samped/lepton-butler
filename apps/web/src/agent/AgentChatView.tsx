@@ -4,14 +4,34 @@ import {
   formatUsdc,
   getAgentPlannerStatus,
   getMarketplaceDeliverables,
-  runPayerAgent,
+  runButler,
   type AuctionMode,
-  type PayerAgentResult,
+  type ButlerResult,
   type QualityTier,
 } from "../api.ts";
-import { payerResultToToast, TaskCompletionToast, type TaskCompletionToastState } from "../marketplace/CreateTaskModal.tsx";
+import { butlerResultToToast, TaskCompletionToast, type TaskCompletionToastState } from "../marketplace/CreateTaskModal.tsx";
 import { formatWorkflowError } from "../format.ts";
-import { IconSend } from "../icons.tsx";
+import { IconPlus, IconSend } from "../icons.tsx";
+
+const MAX_ATTACH_BYTES = 48_000;
+const ACCEPTED_EXTENSIONS = ".sol,.vy,.txt,.md,.json";
+
+interface AttachedDocument {
+  name: string;
+  content: string;
+}
+
+function isSolidityFile(name: string, content: string): boolean {
+  return /\.sol$/i.test(name) || /pragma\s+solidity/i.test(content);
+}
+
+function composeTask(input: string, attachment: AttachedDocument | null): string {
+  const text = input.trim();
+  if (!attachment) return text;
+  const fileBlock = `// File: ${attachment.name}\n${attachment.content.trim()}`;
+  if (text) return `${fileBlock}\n\n${text}`;
+  return `${fileBlock}\n\nAudit this contract for security vulnerabilities.`;
+}
 
 type ChatRole = "user" | "assistant" | "system";
 
@@ -58,13 +78,13 @@ export function AgentChatView({
   canRun,
   payerReason,
   onTaskComplete,
-  onPayerBusyChange,
+  onButlerBusyChange,
   onViewDeliverable,
 }: {
   canRun: boolean;
   payerReason?: string;
   onTaskComplete?: () => void;
-  onPayerBusyChange?: (busy: boolean) => void;
+  onButlerBusyChange?: (busy: boolean) => void;
   onViewDeliverable?: (jobId: string) => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -84,7 +104,9 @@ export function AgentChatView({
   const [busy, setBusy] = useState(false);
   const [plannerAi, setPlannerAi] = useState(false);
   const [completionToast, setCompletionToast] = useState<TaskCompletionToastState | null>(null);
+  const [attachment, setAttachment] = useState<AttachedDocument | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void getAgentPlannerStatus().then((p) => setPlannerAi(p.enabled));
@@ -108,11 +130,43 @@ export function AgentChatView({
   }, []);
 
   useEffect(() => {
-    onPayerBusyChange?.(busy);
-  }, [busy, onPayerBusyChange]);
+    onButlerBusyChange?.(busy);
+  }, [busy, onButlerBusyChange]);
+
+  const handleAttachFile = async (file: File | null) => {
+    if (!file) return;
+    if (file.size > MAX_ATTACH_BYTES) {
+      pushMessage({
+        role: "assistant",
+        content: `“${file.name}” is too large (${Math.round(file.size / 1024)} KB). Attach files up to ${Math.round(MAX_ATTACH_BYTES / 1024)} KB.`,
+        error: true,
+      });
+      return;
+    }
+    try {
+      const content = await file.text();
+      if (!content.trim()) {
+        pushMessage({ role: "assistant", content: "That file appears to be empty.", error: true });
+        return;
+      }
+      setAttachment({ name: file.name, content });
+      if (isSolidityFile(file.name, content)) {
+        setCategory("audit");
+        setQualityTier("standard");
+        setAuctionMode("single");
+        if (!input.trim()) {
+          setInput("Audit this contract for reentrancy, access control, and other vulnerabilities.");
+        }
+      }
+    } catch {
+      pushMessage({ role: "assistant", content: "Could not read that file.", error: true });
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const handleSubmit = async () => {
-    const task = input.trim();
+    const task = composeTask(input, attachment);
     if (!task || busy) return;
 
     if (!canRun) {
@@ -125,7 +179,11 @@ export function AgentChatView({
     }
 
     setInput("");
-    pushMessage({ role: "user", content: task });
+    setAttachment(null);
+    const userPreview = attachment
+      ? [attachment.name, input.trim()].filter(Boolean).join(" — ")
+      : task;
+    pushMessage({ role: "user", content: userPreview });
     setBusy(true);
     setCompletionToast(null);
 
@@ -139,7 +197,7 @@ export function AgentChatView({
     };
 
     try {
-      const result = await runPayerAgent({
+      const result = await runButler({
         brief: task,
         category: express?.category ?? category,
         strategy: "auction",
@@ -150,13 +208,13 @@ export function AgentChatView({
       if (!result) {
         pushMessage({
           role: "assistant",
-          content: "No response from payer agent. Retry the task; if it persists, restart the API (npm run dev).",
+          content: "No response from Butler. Retry the task; if it persists, restart the API (npm run dev).",
           error: true,
         });
         return;
       }
 
-      const toast = payerResultToToast(result);
+      const toast = butlerResultToToast(result);
       const discover = result.phases?.find((p) => p.phase === "discover");
       const negotiate = result.phases?.find((p) => p.phase === "negotiate");
       const settle = result.phases?.find((p) => p.phase === "settle");
@@ -191,7 +249,7 @@ export function AgentChatView({
           role: "assistant",
           content: result.summary
             ? `${result.error ?? "Workflow stopped before all agents finished."}\n\nPartial deliverable:\n${result.summary}`
-            : result.error ?? toast.error ?? "Payer agent could not complete the request.",
+            : result.error ?? toast.error ?? "Butler could not complete the request.",
           error: !result.summary,
           deliverableId: result.jobId,
           meta: negotiate?.message ?? discover?.message,
@@ -428,21 +486,68 @@ export function AgentChatView({
           void handleSubmit();
         }}
       >
-        <textarea
-          className="agent-chat-input"
-          rows={1}
-          placeholder="What should Butler research for you?"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void handleSubmit();
-            }
-          }}
-          disabled={busy}
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="agent-attach-input"
+          accept={ACCEPTED_EXTENSIONS}
+          aria-hidden
+          tabIndex={-1}
+          onChange={(e) => void handleAttachFile(e.target.files?.[0] ?? null)}
         />
-        <button type="submit" className="btn primary agent-send-btn" disabled={busy || !input.trim()} aria-label="Send">
+        <button
+          type="button"
+          className="btn ghost sm agent-attach-btn"
+          disabled={busy}
+          aria-label="Attach document for audit"
+          title="Attach .sol or text file"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <IconPlus size={18} />
+        </button>
+        <div className="agent-composer-field">
+          {attachment && (
+            <div className="agent-attach-chip-row">
+              <span className="agent-attach-chip">
+                <span className="agent-attach-chip-name" title={attachment.name}>
+                  {attachment.name}
+                </span>
+                <button
+                  type="button"
+                  className="agent-attach-chip-remove"
+                  aria-label={`Remove ${attachment.name}`}
+                  onClick={() => setAttachment(null)}
+                >
+                  ×
+                </button>
+              </span>
+            </div>
+          )}
+          <textarea
+            className="agent-chat-input"
+            rows={1}
+            placeholder={
+              attachment
+                ? "Optional instructions for the audit…"
+                : "What should Butler research for you?"
+            }
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void handleSubmit();
+              }
+            }}
+            disabled={busy}
+          />
+        </div>
+        <button
+          type="submit"
+          className="btn primary agent-send-btn"
+          disabled={busy || !composeTask(input, attachment).trim()}
+          aria-label="Send"
+        >
           <IconSend size={16} />
         </button>
       </form>
