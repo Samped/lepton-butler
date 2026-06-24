@@ -79,7 +79,7 @@ export function App() {
   const [ledgerTotalCount, setLedgerTotalCount] = useState(0);
   const [activityPayerAddresses, setActivityPayerAddresses] = useState<string[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
-  const [payerBusy, setPayerBusy] = useState(false);
+  const [butlerBusy, setButlerBusy] = useState(false);
 
   const loadActivityLedger = useCallback(async (scope: ActivityScope) => {
     setActivityLoading(true);
@@ -157,9 +157,9 @@ export function App() {
 
   useEffect(() => {
     refresh();
-    const id = setInterval(() => void refresh({ quiet: payerBusy }), 15_000);
+    const id = setInterval(() => void refresh({ quiet: butlerBusy }), 15_000);
     return () => clearInterval(id);
-  }, [refresh, payerBusy]);
+  }, [refresh, butlerBusy]);
 
   useEffect(() => {
     if (tab !== "activity") return;
@@ -235,7 +235,7 @@ export function App() {
       <div className="app-shell">
         <div className="splash">
           <div className="splash-logo">
-            <span className="splash-mark">B</span>
+            <img src="/logo.png" alt="" className="splash-mark" width={44} height={44} />
             Butler
           </div>
           <div className="splash-spinner" />
@@ -276,10 +276,10 @@ export function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <span className="brand-mark">B</span>
+          <img src="/logo.png" alt="" className="brand-mark" width={28} height={28} />
           <div>
             <strong>Butler</strong>
-            <span>Agent marketplace</span>
+            <span>Agentic hub</span>
           </div>
         </div>
 
@@ -393,14 +393,14 @@ export function App() {
             </div>
           )}
 
-          {payerBusy && (tab === "agent" || tab === "marketplace") && (
+          {butlerBusy && (tab === "agent" || tab === "marketplace") && (
             <div className="inline-alert info">
-              <strong>Payer running</strong> — auctions and x402 payments can take several minutes. Keep this tab
+              <strong>Butler is running</strong> — auctions and x402 payments can take several minutes. Keep this tab
               open; your deliverable will appear in Library when finished.
             </div>
           )}
 
-          {error && !payerBusy && (
+          {error && !butlerBusy && (
             <div className="inline-alert">
               <strong>Partial load</strong> — {error}
             </div>
@@ -411,7 +411,7 @@ export function App() {
               canRun={agentStatus?.canRun ?? false}
               payerReason={agentStatus?.reason}
               onTaskComplete={refresh}
-              onPayerBusyChange={setPayerBusy}
+              onButlerBusyChange={setButlerBusy}
               onViewDeliverable={(jobId) => {
                 setLibraryJobId(jobId);
                 setTab("library");
