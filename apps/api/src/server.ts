@@ -61,7 +61,7 @@ type PaidRequest = express.Request & {
   };
 };
 
-const PORT = Number(process.env.API_PORT ?? 3001);
+const PORT = Number(process.env.PORT ?? process.env.API_PORT ?? 3001);
 const WEB_URL = process.env.WEB_URL ?? `http://localhost:${process.env.WEB_PORT ?? 5174}`;
 
 function resolveApiBase(): string {

@@ -1,0 +1,36 @@
+# Free-tier API deploy on Render (https://render.com)
+# Dashboard: New → Blueprint → connect this repo, or New Web Service with these settings.
+#
+# Limits on Render Free:
+# - Sleeps after ~15 min idle (first request may take 30–60s)
+# - Ephemeral disk — .data/ (ledger, Library, Circle session) resets on restart/redeploy
+# - Fine for demos; use a VPS for persistent production
+
+services:
+  - type: web
+    name: butler-api
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: python3 scripts/install-deps.py && python3 scripts/install-circle-cli.py && npm install
+    startCommand: npm run start -w @butler/api
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: BUTLER_USE_CIRCLE_CLI
+        value: "true"
+      - key: CIRCLE_ACCEPT_TERMS
+        value: "1"
+      - key: ARC_TESTNET_RPC
+        value: https://rpc.testnet.arc.network
+      - key: GATEWAY_FACILITATOR_URL
+        value: https://gateway-api-testnet.circle.com
+      - key: BUTLER_SELLER_ADDRESS
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: WEB_URL
+        sync: false
+      - key: BUTLER_API_URL
+        sync: false
