@@ -11,11 +11,11 @@
     "@butler/arc": "*",
     "@butler/core": "*",
     "@butler/delegation": "*",
-    "@circle-fin/x402-batching": "file:../../.vendor/x402-batching.tgz",
-    "@x402/core": "file:../../.vendor/x402-core-2.16.0.tgz",
-    "@x402/evm": "file:../../.vendor/x402-evm-2.16.0.tgz",
+    "@circle-fin/x402-batching": "^3.2.0",
+    "@x402/core": "2.16.0",
+    "@x402/evm": "2.16.0",
     "dotenv": "^16.4.5",
-    "viem": "file:../../.vendor/viem-2.52.2.tgz"
+    "viem": "2.52.2"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

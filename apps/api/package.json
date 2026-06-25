@@ -12,9 +12,9 @@
     "@butler/arc": "*",
     "@butler/core": "*",
     "@butler/delegation": "*",
-    "@circle-fin/x402-batching": "file:../../.vendor/x402-batching.tgz",
-    "@x402/core": "file:../../.vendor/x402-core-2.16.0.tgz",
-    "@x402/evm": "file:../../.vendor/x402-evm-2.16.0.tgz",
+    "@circle-fin/x402-batching": "^3.2.0",
+    "@x402/core": "2.16.0",
+    "@x402/evm": "2.16.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^5.2.1"
