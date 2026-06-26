@@ -70,6 +70,7 @@ async function handleLoginVerify(
       return;
     }
     const emailHint = String(req.body?.email ?? "").trim();
+    const otpPrefixHint = String(req.body?.otpPrefix ?? "").trim();
     const testnet = req.body?.testnet !== false;
     const { circleLoginVerifyAsync, circleListAgentWallets, ensureCircleExecutor } = await import(
       "./circle-cli.ts"
@@ -78,7 +79,13 @@ async function handleLoginVerify(
       "./circle-config.ts"
     );
     const verifyTimeout = process.env.RENDER || process.env.BUTLER_LITE_API ? 120_000 : 60_000;
-    const result = await circleLoginVerifyAsync(requestId, otp, testnet, verifyTimeout);
+    const result = await circleLoginVerifyAsync(
+      requestId,
+      otp,
+      testnet,
+      verifyTimeout,
+      otpPrefixHint || undefined
+    );
     if (!result?.ok) {
       res.status(401).json({
         error: result?.error ?? "Login failed",

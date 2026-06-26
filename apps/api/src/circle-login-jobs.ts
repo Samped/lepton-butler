@@ -100,6 +100,10 @@ function runLoginJob(jobId: string, email: string, testnet: boolean): void {
         return;
       }
       const result = await circleLoginInitAsync(email, testnet, 120_000);
+      if (result.ok && result.requestId) {
+        const { backupLoginRequestSession } = await import("./circle-login-session.ts");
+        backupLoginRequestSession(result.requestId);
+      }
       updateJob(jobId, {
         status: result.ok ? "ok" : "error",
         result,

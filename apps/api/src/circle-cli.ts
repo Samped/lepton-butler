@@ -8,6 +8,12 @@ import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveCircleExecutorAddress, resolveCircleChain, saveCircleConfig, loadCircleConfig } from "./circle-config.ts";
 import { formatPaymentError } from "./payment-errors.ts";
+import {
+  backupLoginRequestSession,
+  hasLoginRequestSession,
+  readOtpHeadFromSession,
+  restoreLoginRequestSession,
+} from "./circle-login-session.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -76,15 +82,18 @@ function readLoginRequestEmail(requestId: string): string | undefined {
   return typeof email === "string" && email.includes("@") ? email : undefined;
 }
 
-function normalizeOtp(otp: string): string {
+function normalizeOtp(otp: string, requestId?: string, prefixHint?: string): string {
   const trimmed = otp.trim().replace(/\s/g, "");
   const prefixed = trimmed.match(/^([A-Za-z0-9]{3})-?(\d{6})$/i);
   if (prefixed) return `${prefixed[1].toUpperCase()}-${prefixed[2]}`;
   const digits = trimmed.replace(/\D/g, "");
   if (digits.length >= 6) {
     const six = digits.slice(-6);
-    const prefixMatch = trimmed.match(/^([A-Za-z0-9]{3})[- ]?/i);
-    if (prefixMatch) return `${prefixMatch[1].toUpperCase()}-${six}`;
+    const head =
+      (typeof prefixHint === "string" && prefixHint.length >= 2 ? prefixHint.toUpperCase() : undefined) ??
+      (requestId ? readOtpHeadFromSession(requestId) : undefined) ??
+      (requestId ? readOtpPrefix(requestId) : undefined);
+    if (head) return `${head}-${six}`;
     return six;
   }
   return trimmed;
@@ -518,6 +527,7 @@ function parseCircleLoginInitResult(
     };
   }
   const otpPrefix = readOtpPrefix(requestId);
+  backupLoginRequestSession(requestId);
   return { ok: true, requestId, email, message, otpPrefix };
 }
 
@@ -529,9 +539,22 @@ export interface CircleLoginVerifyResult {
   needsNewCode?: boolean;
 }
 
-export function circleLoginVerify(requestId: string, otp: string, testnet = true): CircleLoginVerifyResult {
+export function circleLoginVerify(
+  requestId: string,
+  otp: string,
+  testnet = true,
+  prefixHint?: string
+): CircleLoginVerifyResult {
   invalidateCircleCache();
-  const normalized = normalizeOtp(otp);
+  restoreLoginRequestSession(requestId);
+  if (!hasLoginRequestSession(requestId)) {
+    return {
+      ok: false,
+      error: "Code session expired on the server — tap Resend code and verify within 2 minutes.",
+      needsNewCode: true,
+    };
+  }
+  const normalized = normalizeOtp(otp, requestId, prefixHint);
   const args = ["wallet", "login", "--request", requestId, "--otp", normalized];
   if (testnet) args.push("--testnet");
   const { ok, data, raw, err } = runCircleJson(args);
@@ -542,10 +565,19 @@ export async function circleLoginVerifyAsync(
   requestId: string,
   otp: string,
   testnet = true,
-  timeoutMs = 60_000
+  timeoutMs = 60_000,
+  prefixHint?: string
 ): Promise<CircleLoginVerifyResult> {
   invalidateCircleCache();
-  const normalized = normalizeOtp(otp);
+  restoreLoginRequestSession(requestId);
+  if (!hasLoginRequestSession(requestId)) {
+    return {
+      ok: false,
+      error: "Code session expired on the server — tap Resend code and verify within 2 minutes.",
+      needsNewCode: true,
+    };
+  }
+  const normalized = normalizeOtp(otp, requestId, prefixHint);
   const args = ["wallet", "login", "--request", requestId, "--otp", normalized];
   if (testnet) args.push("--testnet");
   const { ok, data, raw, err } = await runCircleJsonAsync(args, timeoutMs);

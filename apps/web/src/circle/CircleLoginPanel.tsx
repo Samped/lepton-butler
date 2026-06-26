@@ -60,6 +60,16 @@ function shortEmail(value: string): string {
   return `${local.slice(0, 8)}…${domain}`;
 }
 
+function formatOtpForVerify(otp: string, prefix: string | null): string {
+  const trimmed = otp.trim();
+  if (trimmed.includes("-")) return trimmed;
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length >= 6 && prefix) {
+    return `${prefix.toUpperCase()}-${digits.slice(-6)}`;
+  }
+  return trimmed;
+}
+
 function otpDigits(value: string): number {
   return value.replace(/\D/g, "").length;
 }
@@ -177,7 +187,12 @@ export function CircleLoginPanel({
     setError(null);
     try {
       await wakeApiForLogin(45_000);
-      const res = await circleLoginVerify(requestId, otp, email);
+      const res = await circleLoginVerify(
+        requestId,
+        formatOtpForVerify(otp, otpPrefix),
+        email,
+        otpPrefix ?? undefined
+      );
       const loggedInEmail = res.email ?? email;
       setWallets(res.wallets ?? []);
       setStatus((prev) => ({
@@ -319,7 +334,7 @@ export function CircleLoginPanel({
                   {otpPrefix ? (
                     <>
                       <br />
-                      Format: <strong>{otpPrefix}-######</strong> or 6 digits only
+                      Use the full code from email: <strong>{otpPrefix}-######</strong>
                     </>
                   ) : (
                     <>

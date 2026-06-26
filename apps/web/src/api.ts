@@ -350,12 +350,17 @@ export async function circleLoginInit(email: string) {
   throw new Error("No code received after 2 minutes. Tap Send login code to try again.");
 }
 
-export async function circleLoginVerify(requestId: string, otp: string, email?: string) {
+export async function circleLoginVerify(
+  requestId: string,
+  otp: string,
+  email?: string,
+  otpPrefix?: string
+) {
   const timeout = IS_LOCAL_API ? 90_000 : 120_000;
   const init: RequestInit = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ requestId, otp, testnet: true, email }),
+    body: JSON.stringify({ requestId, otp, testnet: true, email, otpPrefix }),
   };
   let lastErr: Error | null = null;
   for (let attempt = 1; attempt <= 5; attempt++) {
