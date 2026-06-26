@@ -365,30 +365,39 @@ export async function pollCircleLoginJob(
 
 /** Wake API, start Circle OTP job, and wait until the code is actually sent. */
 export async function sendLoginCode(
-  email: string,
-  onProgress?: (elapsedSec: number) => void
+  email: string
 ): Promise<CircleLoginInitResult & { email: string }> {
+  const deadline = Date.now() + (IS_LOCAL_API ? 90_000 : 120_000);
+  const budget = () => Math.max(5_000, deadline - Date.now());
   let lastErr: Error | null = null;
-  for (let attempt = 1; attempt <= 4; attempt++) {
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    if (budget() < 8_000) break;
     try {
-      await wakeApiForLogin(IS_LOCAL_API ? 20_000 : 150_000);
+      await wakeApiForLogin(Math.min(IS_LOCAL_API ? 20_000 : 45_000, budget()));
       const started = await startCircleLoginJob(email);
-      const result = await pollCircleLoginJob(started.jobId, {
-        onPending: (ms) => onProgress?.(Math.max(1, Math.round(ms / 1000))),
-      });
+      const result = await pollCircleLoginJob(started.jobId);
       return { ...result, email: result.email || started.email };
     } catch (err) {
       lastErr = err instanceof Error ? err : new Error(String(err));
       const retryable =
-        attempt < 4 &&
+        attempt < 2 &&
+        budget() > 15_000 &&
         /API is down|Bad Gateway|Cannot reach API|502|503|504|timed out|waking up|unavailable/i.test(
           lastErr.message
         );
       if (!retryable) throw lastErr;
-      await new Promise((r) => setTimeout(r, attempt * 3_000));
+      await new Promise((r) => setTimeout(r, 2_000));
     }
   }
-  throw lastErr ?? new Error("Failed to send login code");
+  throw (
+    lastErr ??
+    new Error(
+      IS_LOCAL_API
+        ? "Failed to send login code."
+        : "Server not responding. Open /api/health — if Bad Gateway, redeploy on Render and wait 2 min."
+    )
+  );
 }
 
 export async function circleLoginInit(email: string) {

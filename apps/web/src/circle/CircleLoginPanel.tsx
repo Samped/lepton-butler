@@ -126,6 +126,7 @@ export function CircleLoginPanel({
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(saved?.hint ?? null);
   const [busy, setBusy] = useState(false);
+  const [sending, setSending] = useState(false);
   const [sendElapsed, setSendElapsed] = useState(0);
   const [open, setOpen] = useState(false);
   const [showFundModal, setShowFundModal] = useState(false);
@@ -204,6 +205,7 @@ export function CircleLoginPanel({
       setEmailHint(null);
     }
     setBusy(true);
+    setSending(true);
     setError(null);
     setStep("otp");
     setOpen(true);
@@ -232,6 +234,7 @@ export function CircleLoginPanel({
       );
     } finally {
       window.clearInterval(tick);
+      setSending(false);
       setBusy(false);
     }
   };
@@ -239,6 +242,7 @@ export function CircleLoginPanel({
   const handleVerify = async () => {
     if (!requestId || otpDigits(otp) < 6 || busy) return;
     setBusy(true);
+    setSending(false);
     setError(null);
     try {
       await wakeApiForLogin(90_000);
@@ -408,12 +412,12 @@ export function CircleLoginPanel({
         ) : step === "otp" ? (
           <>
             <p className="payer-otp-hint">
-              {busy ? (
+              {sending ? (
                 <>
                   Sending code to <strong>{email}</strong>…
                   <br />
                   <span className="muted">
-                    Usually 30–60s{sendElapsed > 0 ? ` (${sendElapsed}s)` : ""}. Check spam too.
+                    Usually 30–60s{sendElapsed > 0 ? ` (${sendElapsed}s)` : ""}. Stops after 2 min if server is down.
                   </span>
                 </>
               ) : codeReady ? (
@@ -445,7 +449,7 @@ export function CircleLoginPanel({
               autoComplete="one-time-code"
               inputMode="text"
               autoFocus
-              disabled={!codeReady || busy}
+              disabled={!codeReady || sending || busy}
               aria-label="Email verification code"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && codeReady && otpDigits(otp) >= 6) void handleVerify();
@@ -455,15 +459,15 @@ export function CircleLoginPanel({
               <button
                 type="button"
                 className="btn primary sm"
-                disabled={busy || !codeReady || otpDigits(otp) < 6}
+                disabled={sending || busy || !codeReady || otpDigits(otp) < 6}
                 onClick={handleVerify}
               >
-                {busy ? "Logging in…" : "Verify & log in"}
+                {sending ? "Sending code…" : busy ? "Logging in…" : "Verify & log in"}
               </button>
-              <button type="button" className="btn ghost sm" disabled={busy} onClick={handleSendOtp}>
+              <button type="button" className="btn ghost sm" disabled={sending || busy} onClick={handleSendOtp}>
                 Resend
               </button>
-              <button type="button" className="btn ghost sm" disabled={busy} onClick={goToEmail}>
+              <button type="button" className="btn ghost sm" disabled={sending || busy} onClick={goToEmail}>
                 Back
               </button>
             </div>
