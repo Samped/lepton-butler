@@ -8,9 +8,9 @@ import {
   getCircleStatus,
   getCircleWallets,
   pollCircleLoginJob,
+  resolveLoginRequestId,
   setCircleExecutor,
   shortAddr,
-  waitForLoginRequestId,
   type CircleAgentWallet,
   type CircleStatus,
 } from "../api.ts";
@@ -310,15 +310,12 @@ export function CircleLoginPanel({
     setError(null);
     setVerifyHint("Connecting…");
     try {
-      let rid = requestId;
-      if (!rid && jobId) {
-        setVerifyHint("Fetching login session…");
-        const res = await waitForLoginRequestId(jobId);
-        rid = res.requestId;
-        applyLoginJobResult(res, { jobId, email });
-      }
-      if (!rid) {
-        throw new Error("Still connecting. Wait a few seconds and tap Verify & log in again.");
+      const rid = await resolveLoginRequestId(jobId, requestId);
+      if (rid !== requestId) {
+        applyLoginJobResult(
+          { requestId: rid, otpPrefix: otpPrefix ?? undefined, hint: hint ?? undefined },
+          { jobId: jobId ?? undefined, email }
+        );
       }
       const formattedOtp = formatOtpForVerify(otp, otpPrefix);
       const res = await circleLoginVerify(rid, formattedOtp, email, otpPrefix ?? undefined, {
@@ -351,8 +348,8 @@ export function CircleLoginPanel({
       const err = e as Error & { needsNewCode?: boolean };
       const msg = err.message;
       setError(
-        /Cannot reach API|waking up|502|503|504|Bad Gateway/i.test(msg) && !err.needsNewCode
-          ? `${msg} Your code is still valid — tap Verify & log in again in 30 seconds.`
+        /Cannot reach API|waking up|502|503|504|Bad Gateway|timed out/i.test(msg) && !err.needsNewCode
+          ? `${msg} If /api/health shows ok:true, tap Verify & log in again and wait up to 2 minutes.`
           : msg
       );
       if (err.needsNewCode) {

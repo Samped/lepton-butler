@@ -209,26 +209,34 @@ async function request<T>(
   throw lastErr ?? new Error(apiUnreachableMessage());
 }
 
-export const getHealth = () => request<Health>("/api/health", undefined, IS_LOCAL_API ? 15_000 : 25_000, 3);
+export const getHealth = () =>
+  request<Health>("/api/health", undefined, IS_LOCAL_API ? 15_000 : 60_000, IS_LOCAL_API ? 3 : 8);
 
-/** Wake Render free tier before Circle login (health can take 30–90s when asleep). */
-export async function wakeApiForLogin(maxWaitMs = IS_LOCAL_API ? 15_000 : 120_000): Promise<void> {
+/** Best-effort wake; returns false instead of throwing so verify can still try. */
+export async function tryWakeApiForLogin(maxWaitMs = IS_LOCAL_API ? 12_000 : 30_000): Promise<boolean> {
   const started = Date.now();
-  let delay = 2_000;
+  let delay = 1_500;
   while (Date.now() - started < maxWaitMs) {
     try {
       const h = await getHealth();
-      if (h.ok && h.mode !== "starting") return;
+      if (h.ok && h.mode !== "starting") return true;
     } catch {
       /* retry */
     }
     await new Promise((r) => setTimeout(r, delay));
-    delay = Math.min(delay + 1_000, 8_000);
+    delay = Math.min(delay + 1_000, 6_000);
   }
+  return false;
+}
+
+/** Wake Render free tier before Circle login (health can take 30–90s when asleep). */
+export async function wakeApiForLogin(maxWaitMs = IS_LOCAL_API ? 15_000 : 120_000): Promise<void> {
+  const ok = await tryWakeApiForLogin(maxWaitMs);
+  if (ok) return;
   throw new Error(
     IS_LOCAL_API
       ? `Cannot reach API at ${API} — is npm run dev:api running?`
-      : `API is down (${API}). Open ${API}/api/health — if you see Bad Gateway, wait for Render to redeploy (check the Render dashboard), then try again.`
+      : `Cannot reach API at ${API} yet. If /api/health works in your browser, tap Verify & log in again.`
   );
 }
 
@@ -471,6 +479,23 @@ export async function waitForLoginRequestId(
   throw new Error("Still connecting to server. Tap Verify again in a few seconds.");
 }
 
+/** Resolve Circle requestId from job poll (used before verify). */
+export async function resolveLoginRequestId(
+  jobId?: string | null,
+  existing?: string | null
+): Promise<string> {
+  if (existing) return existing;
+  if (!jobId) throw new Error("Missing login session. Tap Send code again.");
+  await tryWakeApiForLogin(IS_LOCAL_API ? 12_000 : 25_000);
+  const status = await fetchCircleLoginJobOnce(jobId);
+  if (status.requestId) return status.requestId;
+  if (status.status === "pending") {
+    const res = await waitForLoginRequestId(jobId, IS_LOCAL_API ? 60_000 : 90_000);
+    return res.requestId;
+  }
+  throw new Error(status.error ?? "Login session expired. Send a new code.");
+}
+
 export async function circleLoginInit(email: string) {
   for (let sendAttempt = 1; sendAttempt <= 2; sendAttempt++) {
     try {
@@ -496,8 +521,8 @@ export async function circleLoginVerify(
   otpPrefix?: string,
   opts?: { onProgress?: (message: string) => void }
 ) {
-  const timeout = IS_LOCAL_API ? 90_000 : 120_000;
-  const perRequestRetries = IS_LOCAL_API ? 4 : 15;
+  const timeout = IS_LOCAL_API ? 90_000 : 180_000;
+  const perRequestRetries = IS_LOCAL_API ? 4 : 12;
   const init: RequestInit = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -505,17 +530,11 @@ export async function circleLoginVerify(
   };
   let lastErr: Error | null = null;
 
-  for (let attempt = 1; attempt <= 8; attempt++) {
+  await tryWakeApiForLogin(IS_LOCAL_API ? 12_000 : 20_000);
+
+  for (let attempt = 1; attempt <= 6; attempt++) {
     try {
-      opts?.onProgress?.(
-        attempt === 1 ? "Waking server…" : `Retrying verify (${attempt}/8)…`
-      );
-      try {
-        await wakeApiForLogin(Math.min(IS_LOCAL_API ? 20_000 : 60_000, 90_000));
-      } catch {
-        /* try verify anyway — health may lag behind login routes */
-      }
-      opts?.onProgress?.("Verifying code…");
+      opts?.onProgress?.(attempt === 1 ? "Verifying code…" : `Retrying verify (${attempt}/6)…`);
       const body = await request<{
         ok?: boolean;
         email?: string;
@@ -535,18 +554,20 @@ export async function circleLoginVerify(
       lastErr = err instanceof Error ? err : new Error(String(err));
       const needsNewCode = !!(lastErr as Error & { needsNewCode?: boolean }).needsNewCode;
       const retryable =
-        attempt < 8 &&
+        attempt < 6 &&
         !needsNewCode &&
         /404|502|503|504|waking up|Cannot reach API|timed out|Bad Gateway|unavailable/i.test(
           lastErr.message
         );
       if (!retryable) throw lastErr;
-      await new Promise((r) => setTimeout(r, Math.min(attempt * 3_000, 12_000)));
+      opts?.onProgress?.("Server busy — retrying…");
+      await tryWakeApiForLogin(15_000);
+      await new Promise((r) => setTimeout(r, Math.min(attempt * 2_500, 10_000)));
     }
   }
   throw (
     lastErr ??
-    new Error("Could not reach the server. Open the API health link in a new tab, wait for JSON, then tap Verify again.")
+    new Error("Verify timed out. If /api/health works, tap Verify & log in again (Circle can take up to 2 minutes).")
   );
 }
 
