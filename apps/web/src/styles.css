@@ -2845,48 +2845,6 @@ select.field-input {
   margin-bottom: 0.375rem;
 }
 
-.payer-otp-input-lg {
-  font-size: 1.125rem;
-  padding: 0.75rem 0.875rem;
-  margin-bottom: 0.75rem;
-}
-
-.payer-otp-sheet-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 20000;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 1rem;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
-}
-
-.payer-otp-sheet {
-  width: min(420px, 100%);
-  padding: 1.25rem;
-  background: var(--surface-raised);
-  border: 1px solid var(--border-hover);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  box-shadow: var(--shadow-md);
-}
-
-.payer-otp-sheet-title {
-  margin: 0 0 0.5rem;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.payer-otp-sheet-actions {
-  flex-wrap: wrap;
-}
-
-.payer-otp-sheet-actions .btn.primary {
-  flex: 1 1 100%;
-}
-
 .payer-popover-title {
   margin: 0 0 0.625rem;
   font-size: 0.6875rem;

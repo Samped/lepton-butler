@@ -364,13 +364,8 @@ export function App() {
                   if (info.executorAddress) {
                     parts.push(`Wallet ${shortAddr(info.executorAddress)} connected`);
                   }
-                  if (info.funding?.walletFund?.ok) {
-                    parts.push(info.funding.walletFund.message ?? "Testnet USDC funded");
-                  }
-                  if (info.funding?.gatewayDeposit?.ok) {
-                    parts.push(info.funding.gatewayDeposit.message ?? "Gateway funded for x402");
-                  }
-                  if (parts.length) setLoginNotice(parts.join(" · "));
+                  parts.push("Funding testnet USDC in the background — Gateway balance updates in ~1 min");
+                  setLoginNotice(parts.join(" · "));
                 }}
               />
               <MetricChip label="Mode" value={live ? "Live" : "Dev"} variant={live ? "success" : "default"} />

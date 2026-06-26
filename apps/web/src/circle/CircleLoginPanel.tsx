@@ -10,6 +10,7 @@ import {
   shortAddr,
   startCircleLoginJob,
   wakeApiForLogin,
+  fundCircleWallet,
   IS_LOCAL_API,
   type CircleAgentWallet,
   type CircleStatus,
@@ -92,10 +93,7 @@ export function CircleLoginPanel({
   variant = "toolbar",
 }: {
   onReady?: () => void;
-  onLoginSuccess?: (info: {
-    executorAddress: string | null;
-    funding?: import("../api.ts").CircleLoginFunding;
-  }) => void;
+  onLoginSuccess?: (info: { executorAddress: string | null }) => void;
   variant?: "sidebar" | "toolbar";
 }) {
   const saved = loadSession();
@@ -143,8 +141,8 @@ export function CircleLoginPanel({
 
   useEffect(() => {
     if (showOtpEntry && !connected) {
-      setOpen(false);
-      setPopoverPos(null);
+      setOpen(true);
+      setPopoverPos(measurePopoverPos(chipRef.current));
     }
   }, [showOtpEntry, connected]);
 
@@ -191,8 +189,8 @@ export function CircleLoginPanel({
     setBusy(true);
     setError(null);
     setStep("otp");
-    setOpen(false);
-    setPopoverPos(null);
+    setOpen(true);
+    setPopoverPos(measurePopoverPos(chipRef.current));
     setAwaitingSession(true);
     setOtp("");
     setSendElapsed(0);
@@ -267,9 +265,9 @@ export function CircleLoginPanel({
       setOtp("");
       setOpen(false);
       await refresh();
-      onLoginSuccess?.({
-        executorAddress: res.executorAddress ?? null,
-        funding: res.funding,
+      onLoginSuccess?.({ executorAddress: res.executorAddress ?? null });
+      void fundCircleWallet().catch(() => {
+        /* funding runs in background on the API */
       });
       onReady?.();
     } catch (e) {
@@ -317,7 +315,7 @@ export function CircleLoginPanel({
   };
 
   const popover =
-    open && popoverPos && !showOtpEntry ? (
+    open && popoverPos ? (
       <div
         ref={popoverRef}
         className="payer-popover payer-popover-fixed"
@@ -340,9 +338,7 @@ export function CircleLoginPanel({
                 Gateway: {status.gatewayBalanceUsdc} USDC
                 {Number(status.gatewayBalanceUsdc) === 0 && (
                   <span className="payer-balance-hint">
-                    Fund at faucet.circle.com (Arc testnet), or run{" "}
-                    <code>circle wallet fund --chain ARC-TESTNET</code>, then{" "}
-                    <code>circle gateway deposit --method direct</code>.
+                    Funding your wallet with testnet USDC — refresh in a moment.
                   </span>
                 )}
               </p>
@@ -365,6 +361,62 @@ export function CircleLoginPanel({
             <button type="button" className="btn ghost sm payer-popover-btn" disabled={busy} onClick={handleLogout}>
               Sign out
             </button>
+          </>
+        ) : showOtpEntry ? (
+          <>
+            <p className="payer-otp-hint">
+              {awaitingSession || (busy && !requestId) ? (
+                <>
+                  Sending to <strong>{email}</strong>… check your inbox.
+                  <br />
+                  <span className="muted">Enter the code below as soon as it arrives.</span>
+                </>
+              ) : (
+                <>
+                  Code sent to <strong>{email}</strong>
+                  {otpPrefix ? (
+                    <>
+                      <br />
+                      Use the full code from email: <strong>{otpPrefix}-######</strong>
+                    </>
+                  ) : (
+                    <>
+                      <br />
+                      {hint ?? "Enter the code from your email"}
+                    </>
+                  )}
+                </>
+              )}
+            </p>
+            <input
+              className="field-input payer-otp-input"
+              placeholder={otpPrefix ? `${otpPrefix}-123456` : "ABC-123456 or 6 digits"}
+              value={otp}
+              onChange={(e) => setOtp(e.target.value)}
+              autoComplete="one-time-code"
+              inputMode="text"
+              autoFocus
+              aria-label="Email verification code"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && requestId && otpDigits(otp) >= 6) void handleVerify();
+              }}
+            />
+            <div className="payer-actions">
+              <button
+                type="button"
+                className="btn primary sm"
+                disabled={busy || !requestId || otpDigits(otp) < 6}
+                onClick={handleVerify}
+              >
+                {busy && requestId ? "Verifying…" : !requestId ? "Linking session…" : "Verify"}
+              </button>
+              <button type="button" className="btn ghost sm" disabled={busy} onClick={handleSendOtp}>
+                Resend
+              </button>
+              <button type="button" className="btn ghost sm" disabled={busy} onClick={goToEmail}>
+                Back
+              </button>
+            </div>
           </>
         ) : (
           <>
@@ -396,70 +448,7 @@ export function CircleLoginPanel({
           </>
         )}
 
-        {error && !showOtpEntry && <p className="payer-error">{error}</p>}
-      </div>
-    ) : null;
-
-  const otpSheet =
-    showOtpEntry && !connected ? (
-      <div className="payer-otp-sheet-backdrop" role="presentation">
-        <div className="payer-otp-sheet" role="dialog" aria-label="Enter login code">
-          <p className="payer-otp-sheet-title">Enter your login code</p>
-          <p className="payer-otp-hint">
-            {awaitingSession || (busy && !requestId) ? (
-              <>
-                Sending to <strong>{email}</strong>… check your inbox.
-                <br />
-                <span className="muted">Paste the code below as soon as it arrives.</span>
-              </>
-            ) : (
-              <>
-                Code sent to <strong>{email}</strong>
-                {otpPrefix ? (
-                  <>
-                    <br />
-                    Use the full code from email: <strong>{otpPrefix}-######</strong>
-                  </>
-                ) : (
-                  <>
-                    <br />
-                    {hint ?? "Enter the code from your email"}
-                  </>
-                )}
-              </>
-            )}
-          </p>
-          <input
-            className="field-input payer-otp-input payer-otp-input-lg"
-            placeholder={otpPrefix ? `${otpPrefix}-123456` : "ABC-123456 or 6 digits"}
-            value={otp}
-            onChange={(e) => setOtp(e.target.value)}
-            autoComplete="one-time-code"
-            inputMode="text"
-            autoFocus
-            aria-label="Email verification code"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && requestId && otpDigits(otp) >= 6) void handleVerify();
-            }}
-          />
-          <div className="payer-actions payer-otp-sheet-actions">
-            <button
-              type="button"
-              className="btn primary"
-              disabled={busy || !requestId || otpDigits(otp) < 6}
-              onClick={handleVerify}
-            >
-              {busy && requestId ? "Verifying…" : !requestId ? "Linking session…" : "Verify code"}
-            </button>
-            <button type="button" className="btn ghost sm" disabled={busy} onClick={handleSendOtp}>
-              Resend
-            </button>
-            <button type="button" className="btn ghost sm" disabled={busy} onClick={goToEmail}>
-              Cancel
-            </button>
-          </div>
-          {error && <p className="payer-error">{error}</p>}
-        </div>
+        {error && <p className="payer-error">{error}</p>}
       </div>
     ) : null;
 
@@ -499,7 +488,6 @@ export function CircleLoginPanel({
         </button>
 
         {popover && createPortal(popover, document.body)}
-        {otpSheet && createPortal(otpSheet, document.body)}
       </div>
     );
   }

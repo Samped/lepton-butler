@@ -365,18 +365,13 @@ export async function circleLoginInit(email: string) {
   throw new Error("No code received after 2 minutes. Tap Send login code to try again.");
 }
 
-export interface CircleLoginFunding {
-  walletFund: { ok: boolean; message?: string; error?: string };
-  gatewayDeposit?: { ok: boolean; message?: string; error?: string };
-}
-
 export async function circleLoginVerify(
   requestId: string,
   otp: string,
   email?: string,
   otpPrefix?: string
 ) {
-  const timeout = IS_LOCAL_API ? 120_000 : 180_000;
+  const timeout = IS_LOCAL_API ? 90_000 : 120_000;
   const init: RequestInit = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -391,7 +386,6 @@ export async function circleLoginVerify(
         message?: string;
         wallets?: CircleAgentWallet[];
         executorAddress?: string | null;
-        funding?: CircleLoginFunding;
       }>("/api/circle/login/verify", init, timeout, 1);
       return {
         ok: true as const,
@@ -399,7 +393,6 @@ export async function circleLoginVerify(
         message: body.message,
         wallets: body.wallets ?? [],
         executorAddress: body.executorAddress ?? null,
-        funding: body.funding,
       };
     } catch (err) {
       lastErr = err instanceof Error ? err : new Error(String(err));
@@ -411,6 +404,14 @@ export async function circleLoginVerify(
     }
   }
   throw lastErr ?? new Error("Verify failed");
+}
+
+export function fundCircleWallet() {
+  return request<{ pending: boolean; address: string; chain: string }>("/api/circle/fund", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  }, 15_000, 2);
 }
 
 export function circleLogout() {

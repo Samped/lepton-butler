@@ -902,7 +902,7 @@ export async function fundCircleAgentAfterLogin(
       }
     : {
         ok: false,
-        error: dep.error ?? dep.stderr || dep.stdout || "Gateway deposit failed",
+        error: dep.error ?? (dep.stderr || dep.stdout || "Gateway deposit failed"),
       };
 
   if (dep.ok) {

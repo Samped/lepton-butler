@@ -14,6 +14,7 @@ import {
   circleLogout,
   circleVersion,
   ensureCircleExecutor,
+  fundCircleAgentAfterLogin,
   getGatewayBalanceForApi,
   probeCircleCli,
   scheduleGatewayBalanceRefresh,
@@ -88,6 +89,27 @@ export function loadCoreRoutes(app: Express): void {
       wallets: circleListAgentWallets(chain),
       executorAddress: ensureCircleExecutor() ?? resolveCircleExecutorAddress(),
     });
+  });
+
+  app.post("/api/circle/fund", (_req, res) => {
+    try {
+      if (!circleCliLoggedIn()) {
+        res.status(401).json({ error: "Log in to Circle first" });
+        return;
+      }
+      const executor = ensureCircleExecutor() ?? resolveCircleExecutorAddress();
+      if (!executor) {
+        res.status(400).json({ error: "No agent wallet found" });
+        return;
+      }
+      const chain = resolveCircleChain();
+      res.status(202).json({ pending: true, address: executor, chain });
+      void fundCircleAgentAfterLogin(executor, chain).catch((err) => {
+        console.error("[circle/fund]", err instanceof Error ? err.message : err);
+      });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Fund failed" });
+    }
   });
 
   app.post("/api/circle/executor", (req, res) => {
