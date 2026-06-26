@@ -12,14 +12,16 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm run install:render && npm run build:render -w @butler/api
-    startCommand: BUTLER_LITE_API=true npm run start:render -w @butler/api
+    buildCommand: bash scripts/render-build.sh
+    startCommand: bash scripts/render-start.sh
     healthCheckPath: /api/health
     envVars:
       - key: RENDER
         value: "true"
       - key: BUTLER_LITE_API
         value: "true"
+      - key: BUTLER_ROOT
+        value: /opt/render/project/src
       - key: NODE_OPTIONS
         value: "--max-old-space-size=460"
       - key: NODE_VERSION

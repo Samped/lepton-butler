@@ -15,7 +15,7 @@ import {
   restoreLoginRequestSession,
 } from "./circle-login-session.ts";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+const ROOT = process.env.BUTLER_ROOT?.trim() || resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 function circleHomeDir(): string {
   const home = process.env.CIRCLE_HOME?.trim() || resolve(ROOT, ".data", "circle-home");

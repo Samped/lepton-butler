@@ -22,7 +22,7 @@
     "dev:web": "npm run dev -w @butler/web",
     "install:deps": "python3 scripts/install-deps.py",
     "install:full": "node scripts/set-workspaces-full.js && npm install --include=dev",
-    "install:render": "node scripts/set-workspaces-render.js && npm install --omit=dev && bash scripts/ensure-circle-cli.sh",
+    "install:render": "bash scripts/render-build.sh",
     "repair:deps": "python3 scripts/repair-deps.py",
     "agent": "npm run start -w @butler/agent",
     "delegation:deploy": "npm run deploy -w @butler/delegation-app",
