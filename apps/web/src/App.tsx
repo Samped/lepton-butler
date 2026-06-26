@@ -153,7 +153,7 @@ export function App() {
       setAgentStatus(asRes);
       if (asRes.activityPayerAddresses?.length) setActivityPayerAddresses(asRes.activityPayerAddresses);
     }
-    return !!policyRes;
+    return !!policyRes || !!healthRes;
   }, []);
 
   useEffect(() => {
@@ -165,30 +165,16 @@ export function App() {
     void (async () => {
       try {
         await waitForApiReady();
-        if (cancelled) return;
-        while (!cancelled) {
-          const ok = await refresh({ quiet: true });
-          if (ok) {
-            setLoading(false);
-            setConnectSlow(false);
-            break;
-          }
-          await new Promise((r) => setTimeout(r, 2_500));
-        }
       } catch {
-        if (!cancelled) {
-          while (!cancelled) {
-            const ok = await refresh({ quiet: true });
-            if (ok) {
-              setLoading(false);
-              setConnectSlow(false);
-              break;
-            }
-            await new Promise((r) => setTimeout(r, 3_000));
-          }
-        }
-      } finally {
-        window.clearTimeout(slowTimer);
+        /* API may still be waking — show the app and keep retrying */
+      }
+      if (!cancelled) {
+        setLoading(false);
+        setConnectSlow(false);
+      }
+      while (!cancelled) {
+        await refresh({ quiet: true });
+        await new Promise((r) => setTimeout(r, 3_000));
       }
     })();
 
@@ -273,7 +259,7 @@ export function App() {
   const dailyLimit = policy ? Number(policy.dailyLimitUsdc) : 0;
   const spentToday = dailyLimit > 0 ? dailyLimit - Number(remaining) : 0;
 
-  if (loading || !policy) {
+  if (loading) {
     return (
       <div className="app-shell">
         <div className="splash">
@@ -287,23 +273,6 @@ export function App() {
               Connecting to Butler…
             </p>
           )}
-          <div style={{ marginTop: "0.75rem" }}>
-            <CircleLoginPanel variant="toolbar" onReady={() => void refresh({ quiet: true })} />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error && !policy && !health) {
-    return (
-      <div className="app-shell">
-        <div className="error-screen">
-          <h1>Cannot connect</h1>
-          <p>Butler is still starting. This page will retry automatically.</p>
-          <button type="button" className="btn accent" onClick={() => void refresh({ quiet: true })}>
-            Retry now
-          </button>
         </div>
       </div>
     );
@@ -468,6 +437,7 @@ export function App() {
           )}
 
           {tab === "policy" && (
+            policy ? (
             <div className="policy-view">
               <div className="policy-strip">
                 <BudgetRing spent={spentToday} total={dailyLimit} compact />
@@ -528,6 +498,9 @@ export function App() {
                 </Panel>
               </div>
             </div>
+            ) : (
+              <EmptyState title="Loading policy" desc="Syncing spend limits and merchants from the API." />
+            )
           )}
 
           {tab === "activity" && (
