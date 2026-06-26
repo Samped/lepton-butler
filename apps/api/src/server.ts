@@ -6,6 +6,7 @@ import cors from "cors";
 import express from "express";
 import { ARC_EIP155, resolveArcRpc } from "@butler/arc";
 import { registerCircleLoginRoutes } from "./circle-login-routes.ts";
+import { resumePendingLoginJobs } from "./circle-login-jobs.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(__dirname, "../../../.env") });
@@ -66,6 +67,7 @@ app.listen(PORT, () => {
   console.log(`Butler API http://localhost:${PORT} (booting…)`);
   ready = true;
   resolveRoutesReady();
+  resumePendingLoginJobs();
   console.log(`Butler API login ready · Circle OTP`);
 
   void import("./load-core-routes.ts")
