@@ -2838,6 +2838,69 @@ select.field-input {
   z-index: 10000;
 }
 
+.payer-fund-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.payer-fund-modal {
+  width: min(400px, 100%);
+  padding: 1.5rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.payer-fund-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.payer-fund-copy {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.payer-fund-wallet {
+  margin: 0 0 1rem;
+  font-size: 0.8125rem;
+}
+
+.payer-fund-wallet code {
+  font-size: 0.8125rem;
+}
+
+.payer-fund-btn {
+  width: 100%;
+  margin-bottom: 0.75rem;
+}
+
+.payer-fund-alt {
+  margin: 0 0 0.75rem;
+  line-height: 1.4;
+}
+
+.payer-fund-msg {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--accent);
+}
+
+.payer-fund-dismiss {
+  width: 100%;
+}
+
 .payer-otp-input {
   width: 100%;
   font-size: 1rem;

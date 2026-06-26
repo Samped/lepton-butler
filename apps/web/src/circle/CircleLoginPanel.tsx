@@ -3,15 +3,13 @@ import { createPortal } from "react-dom";
 import {
   circleLoginVerify,
   circleLogout,
+  fundCircleWallet,
   getCircleStatus,
   getCircleWallets,
-  pollCircleLoginJob,
+  sendLoginCode,
   setCircleExecutor,
   shortAddr,
-  startCircleLoginJob,
   wakeApiForLogin,
-  fundCircleWallet,
-  IS_LOCAL_API,
   type CircleAgentWallet,
   type CircleStatus,
 } from "../api.ts";
@@ -24,7 +22,6 @@ const SESSION_TTL_MS = 15 * 60 * 1000;
 
 type SavedSession = {
   requestId?: string;
-  jobId?: string;
   email?: string;
   otpPrefix?: string;
   hint?: string;
@@ -46,13 +43,7 @@ function loadSession(): SavedSession | null {
   }
 }
 
-function saveSession(data: {
-  requestId?: string;
-  jobId?: string;
-  email: string;
-  otpPrefix?: string;
-  hint?: string;
-}) {
+function saveSession(data: { requestId: string; email: string; otpPrefix?: string; hint?: string }) {
   sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...data, savedAt: Date.now() }));
 }
 
@@ -109,83 +100,24 @@ export function CircleLoginPanel({
   const [requestId, setRequestId] = useState<string | null>(saved?.requestId ?? null);
   const [otpPrefix, setOtpPrefix] = useState<string | null>(saved?.otpPrefix ?? null);
   const [otp, setOtp] = useState("");
-  const [step, setStep] = useState<Step>(saved?.requestId || saved?.jobId ? "otp" : "email");
+  const [step, setStep] = useState<Step>(saved?.requestId ? "otp" : "email");
   const [wallets, setWallets] = useState<CircleAgentWallet[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(saved?.hint ?? null);
   const [busy, setBusy] = useState(false);
   const [sendElapsed, setSendElapsed] = useState(0);
-  const [awaitingSession, setAwaitingSession] = useState(false);
-  const [codeSent, setCodeSent] = useState(Boolean(saved?.requestId || saved?.jobId));
-  const [pendingJobId, setPendingJobId] = useState<string | null>(saved?.jobId ?? null);
-  const [open, setOpen] = useState(() => Boolean(saved?.requestId || saved?.jobId));
-  const [popoverPos, setPopoverPos] = useState<{ top: number; right: number; width: number } | null>(
-    null
-  );
+  const [open, setOpen] = useState(false);
+  const [showFundModal, setShowFundModal] = useState(false);
+  const [fundBusy, setFundBusy] = useState(false);
+  const [fundMessage, setFundMessage] = useState<string | null>(null);
+  const [loggedInAddress, setLoggedInAddress] = useState<string | null>(null);
+  const [popoverPos, setPopoverPos] = useState<{ top: number; right: number; width: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const chipRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
   const connected = status?.loggedIn ?? false;
-  const showOtpEntry =
-    step === "otp" ||
-    awaitingSession ||
-    Boolean(requestId) ||
-    Boolean(pendingJobId) ||
-    codeSent ||
-    (busy && email.includes("@"));
-
-  const linkingSession = showOtpEntry && !requestId && (awaitingSession || Boolean(pendingJobId));
-
-  const applyLoginJobResult = useCallback(
-    (res: { requestId: string; otpPrefix?: string; hint?: string }) => {
-      setRequestId(res.requestId);
-      setOtpPrefix(res.otpPrefix ?? null);
-      setHint(res.hint ?? null);
-      setPendingJobId(null);
-      setAwaitingSession(false);
-      setCodeSent(true);
-      saveSession({
-        requestId: res.requestId,
-        email,
-        otpPrefix: res.otpPrefix,
-        hint: res.hint,
-      });
-    },
-    [email]
-  );
-
-  useEffect(() => {
-    if (!pendingJobId || requestId) return;
-    let cancelled = false;
-    setAwaitingSession(true);
-    void (async () => {
-      try {
-        const res = await pollCircleLoginJob(pendingJobId, {
-          onPending: () => {
-            if (!cancelled) setAwaitingSession(true);
-          },
-        });
-        if (!cancelled && res.requestId) {
-          applyLoginJobResult(res);
-          setError(null);
-        }
-      } catch (e) {
-        if (cancelled) return;
-        const msg = e instanceof Error ? e.message : "Failed to link session";
-        if (/Cannot reach API|502|503|504|waking up/i.test(msg)) {
-          setError("API is waking up — keep this open. Your email code is still valid.");
-        } else {
-          setError(msg);
-        }
-      } finally {
-        if (!cancelled) setAwaitingSession(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [pendingJobId, requestId, applyLoginJobResult]);
+  const codeReady = Boolean(requestId);
 
   const refresh = useCallback(async () => {
     try {
@@ -206,20 +138,11 @@ export function CircleLoginPanel({
   }, [refresh]);
 
   useEffect(() => {
-    if (showOtpEntry && !connected) {
-      setOpen(true);
-      setPopoverPos(measurePopoverPos(chipRef.current));
-    }
-  }, [showOtpEntry, connected]);
-
-  useEffect(() => {
     if (!open) {
       setPopoverPos(null);
       return;
     }
-    const update = () => {
-      setPopoverPos(measurePopoverPos(chipRef.current));
-    };
+    const update = () => setPopoverPos(measurePopoverPos(chipRef.current));
     update();
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
@@ -232,20 +155,18 @@ export function CircleLoginPanel({
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (showOtpEntry || busy) return;
+      if (step === "otp" || busy || showFundModal) return;
       const target = e.target as Node;
       if (rootRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
       setOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [open, showOtpEntry, busy]);
+  }, [open, step, busy, showFundModal]);
 
   const goToEmail = () => {
     setStep("email");
     setRequestId(null);
-    setPendingJobId(null);
-    setCodeSent(false);
     setOtp("");
     setOtpPrefix(null);
     setHint(null);
@@ -259,21 +180,23 @@ export function CircleLoginPanel({
     setStep("otp");
     setOpen(true);
     setPopoverPos(measurePopoverPos(chipRef.current));
-    setAwaitingSession(true);
-    setCodeSent(false);
-    setPendingJobId(null);
     setRequestId(null);
     setOtp("");
     setSendElapsed(0);
     const tick = window.setInterval(() => setSendElapsed((s) => s + 1), 1_000);
     try {
-      const started = await startCircleLoginJob(email);
-      setCodeSent(true);
-      setPendingJobId(started.jobId);
-      saveSession({ jobId: started.jobId, email });
+      const res = await sendLoginCode(email, (sec) => setSendElapsed(sec));
+      setRequestId(res.requestId);
+      setOtpPrefix(res.otpPrefix ?? null);
+      setHint(res.hint ?? null);
+      saveSession({
+        requestId: res.requestId,
+        email,
+        otpPrefix: res.otpPrefix,
+        hint: res.hint,
+      });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to send OTP";
-      setError(msg);
+      setError(e instanceof Error ? e.message : "Failed to send code");
     } finally {
       window.clearInterval(tick);
       setBusy(false);
@@ -281,15 +204,7 @@ export function CircleLoginPanel({
   };
 
   const handleVerify = async () => {
-    if (!requestId || busy) {
-      setError(
-        linkingSession
-          ? "Still linking your session — wait a few seconds, or tap Resend if this persists."
-          : "Session expired. Tap Resend code."
-      );
-      setStep("otp");
-      return;
-    }
+    if (!requestId || otpDigits(otp) < 6 || busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -301,6 +216,7 @@ export function CircleLoginPanel({
         otpPrefix ?? undefined
       );
       const loggedInEmail = res.email ?? email;
+      const address = res.executorAddress ?? null;
       setWallets(res.wallets ?? []);
       setStatus((prev) => ({
         installed: prev?.installed ?? true,
@@ -310,31 +226,43 @@ export function CircleLoginPanel({
         version: prev?.version ?? null,
         chain: prev?.chain ?? "ARC",
         email: loggedInEmail,
-        executorAddress: res.executorAddress ?? prev?.executorAddress ?? null,
+        executorAddress: address,
       }));
       clearSession();
       setStep("email");
       setOtp("");
       setOpen(false);
+      setLoggedInAddress(address);
+      setShowFundModal(true);
+      setFundMessage(null);
       await refresh();
-      onLoginSuccess?.({ executorAddress: res.executorAddress ?? null });
-      void fundCircleWallet().catch(() => {
-        /* funding runs in background on the API */
-      });
+      onLoginSuccess?.({ executorAddress: address });
       onReady?.();
     } catch (e) {
       const err = e as Error & { needsNewCode?: boolean };
-      const msg =
-        err.name === "AbortError"
-          ? "Verify timed out. Circle may still be processing — refresh the page or resend a code."
-          : err.message;
-      setError(msg);
+      setError(err.message);
       if (err.needsNewCode) {
         setRequestId(null);
         clearSession();
       }
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleFundWallet = async () => {
+    setFundBusy(true);
+    setFundMessage(null);
+    try {
+      await wakeApiForLogin(60_000);
+      await fundCircleWallet();
+      setFundMessage("Testnet USDC is on the way to your wallet. Gateway balance updates in about a minute.");
+      await refresh();
+      onReady?.();
+    } catch (e) {
+      setFundMessage(e instanceof Error ? e.message : "Could not fund wallet. Try the Circle faucet link below.");
+    } finally {
+      setFundBusy(false);
     }
   };
 
@@ -357,6 +285,7 @@ export function CircleLoginPanel({
       await circleLogout();
       goToEmail();
       setOpen(false);
+      setShowFundModal(false);
       await refresh();
       onReady?.();
     } catch (e) {
@@ -365,6 +294,40 @@ export function CircleLoginPanel({
       setBusy(false);
     }
   };
+
+  const fundModal =
+    showFundModal && loggedInAddress ? (
+      <div className="payer-fund-backdrop" role="presentation">
+        <div className="payer-fund-modal" role="dialog" aria-label="Get testnet tokens">
+          <p className="payer-fund-title">You&apos;re logged in</p>
+          <p className="payer-fund-copy">
+            Get free testnet USDC on Arc so you can run agents and pay x402 merchants.
+          </p>
+          <p className="payer-fund-wallet">
+            Your wallet: <code>{shortAddr(loggedInAddress)}</code>
+          </p>
+          <button
+            type="button"
+            className="btn primary payer-fund-btn"
+            disabled={fundBusy}
+            onClick={() => void handleFundWallet()}
+          >
+            {fundBusy ? "Sending tokens…" : "Get testnet USDC"}
+          </button>
+          <p className="muted small payer-fund-alt">
+            Or use{" "}
+            <a href="https://faucet.circle.com" target="_blank" rel="noreferrer">
+              faucet.circle.com
+            </a>{" "}
+            (Arc testnet) and send to your wallet address.
+          </p>
+          {fundMessage && <p className="payer-fund-msg">{fundMessage}</p>}
+          <button type="button" className="btn ghost sm payer-fund-dismiss" onClick={() => setShowFundModal(false)}>
+            Continue to app
+          </button>
+        </div>
+      </div>
+    ) : null;
 
   const popover =
     open && popoverPos ? (
@@ -388,11 +351,6 @@ export function CircleLoginPanel({
             {status?.gatewayBalanceUsdc != null && (
               <p className={`payer-balance${Number(status.gatewayBalanceUsdc) === 0 ? " low" : ""}`}>
                 Gateway: {status.gatewayBalanceUsdc} USDC
-                {Number(status.gatewayBalanceUsdc) === 0 && (
-                  <span className="payer-balance-hint">
-                    Funding your wallet with testnet USDC — refresh in a moment.
-                  </span>
-                )}
               </p>
             )}
             {wallets.length > 1 && (
@@ -414,32 +372,24 @@ export function CircleLoginPanel({
               Sign out
             </button>
           </>
-        ) : showOtpEntry ? (
+        ) : step === "otp" ? (
           <>
             <p className="payer-otp-hint">
-              {linkingSession ? (
+              {busy ? (
                 <>
-                  {codeSent ? (
-                    <>
-                      Code sent to <strong>{email}</strong>
-                      <br />
-                      <span className="muted">Linking session with the API… you can paste your code now.</span>
-                    </>
-                  ) : (
-                    <>
-                      Sending to <strong>{email}</strong>…
-                      <br />
-                      <span className="muted">Check your inbox in a moment.</span>
-                    </>
-                  )}
+                  Sending code to <strong>{email}</strong>…
+                  <br />
+                  <span className="muted">
+                    Usually 30–60s{sendElapsed > 0 ? ` (${sendElapsed}s)` : ""}. Check spam too.
+                  </span>
                 </>
-              ) : (
+              ) : codeReady ? (
                 <>
                   Code sent to <strong>{email}</strong>
                   {otpPrefix ? (
                     <>
                       <br />
-                      Use the full code from email: <strong>{otpPrefix}-######</strong>
+                      Enter <strong>{otpPrefix}-######</strong> from your email
                     </>
                   ) : (
                     <>
@@ -447,6 +397,10 @@ export function CircleLoginPanel({
                       {hint ?? "Enter the code from your email"}
                     </>
                   )}
+                </>
+              ) : (
+                <>
+                  Could not send code to <strong>{email}</strong>. Tap Resend.
                 </>
               )}
             </p>
@@ -458,19 +412,20 @@ export function CircleLoginPanel({
               autoComplete="one-time-code"
               inputMode="text"
               autoFocus
+              disabled={!codeReady || busy}
               aria-label="Email verification code"
               onKeyDown={(e) => {
-                if (e.key === "Enter" && requestId && otpDigits(otp) >= 6) void handleVerify();
+                if (e.key === "Enter" && codeReady && otpDigits(otp) >= 6) void handleVerify();
               }}
             />
             <div className="payer-actions">
               <button
                 type="button"
                 className="btn primary sm"
-                disabled={busy || !requestId || otpDigits(otp) < 6}
+                disabled={busy || !codeReady || otpDigits(otp) < 6}
                 onClick={handleVerify}
               >
-                {linkingSession ? "Linking session…" : busy && requestId ? "Verifying…" : "Verify"}
+                {busy ? "Logging in…" : "Verify & log in"}
               </button>
               <button type="button" className="btn ghost sm" disabled={busy} onClick={handleSendOtp}>
                 Resend
@@ -499,14 +454,8 @@ export function CircleLoginPanel({
               disabled={busy || !email.includes("@")}
               onClick={handleSendOtp}
             >
-              {busy ? "Sending code…" : "Send login code"}
+              Send login code
             </button>
-            {busy && (
-              <p className="muted small" style={{ margin: "0.35rem 0 0" }}>
-                Contacting Circle… {sendElapsed > 0 ? `${sendElapsed}s` : ""}
-                {sendElapsed > 90 ? " — taking longer than usual" : " — usually under 60s"}
-              </p>
-            )}
           </>
         )}
 
@@ -543,13 +492,14 @@ export function CircleLoginPanel({
           ) : (
             <>
               <span className="payer-toolbar-label">Payer</span>
-              <span className="payer-toolbar-value warn">{showOtpEntry ? "Enter code" : "Log in"}</span>
+              <span className="payer-toolbar-value warn">{step === "otp" ? "Enter code" : "Log in"}</span>
             </>
           )}
           <IconChevronDown size={12} className={open ? "open" : ""} />
         </button>
 
         {popover && createPortal(popover, document.body)}
+        {fundModal && createPortal(fundModal, document.body)}
       </div>
     );
   }

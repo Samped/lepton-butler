@@ -360,12 +360,9 @@ export function App() {
                 variant="toolbar"
                 onReady={refresh}
                 onLoginSuccess={(info) => {
-                  const parts: string[] = [];
                   if (info.executorAddress) {
-                    parts.push(`Wallet ${shortAddr(info.executorAddress)} connected`);
+                    setLoginNotice(`Logged in · wallet ${shortAddr(info.executorAddress)}`);
                   }
-                  parts.push("Funding testnet USDC in the background — Gateway balance updates in ~1 min");
-                  setLoginNotice(parts.join(" · "));
                 }}
               />
               <MetricChip label="Mode" value={live ? "Live" : "Dev"} variant={live ? "success" : "default"} />

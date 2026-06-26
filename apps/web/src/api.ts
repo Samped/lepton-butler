@@ -225,6 +225,11 @@ export async function wakeApiForLogin(maxWaitMs = IS_LOCAL_API ? 15_000 : 120_00
     await new Promise((r) => setTimeout(r, delay));
     delay = Math.min(delay + 1_000, 8_000);
   }
+  throw new Error(
+    IS_LOCAL_API
+      ? `Cannot reach API at ${API} — is npm run dev:api running?`
+      : `API not ready after ${Math.round(maxWaitMs / 1000)}s. Open ${API}/api/health in a new tab, wait for "ok":true, then tap Send login code again.`
+  );
 }
 
 /** Poll until API health reports live (Render cold start / route bootstrap). */
@@ -276,7 +281,6 @@ export type CircleLoginInitResult = {
 };
 
 export async function startCircleLoginJob(email: string) {
-  await wakeApiForLogin();
   return request<{ pending?: boolean; jobId: string; email: string }>(
     "/api/circle/login/init",
     {
@@ -355,7 +359,20 @@ export async function pollCircleLoginJob(
       otpPrefix: status.otpPrefix,
     };
   }
-  throw new Error("Still linking your session — keep this open and tap Resend if it takes over 3 minutes.");
+  throw new Error("Sending timed out. Tap Resend and try again.");
+}
+
+/** Wake API, start Circle OTP job, and wait until the code is actually sent. */
+export async function sendLoginCode(
+  email: string,
+  onProgress?: (elapsedSec: number) => void
+): Promise<CircleLoginInitResult & { email: string }> {
+  await wakeApiForLogin();
+  const started = await startCircleLoginJob(email);
+  const result = await pollCircleLoginJob(started.jobId, {
+    onPending: (ms) => onProgress?.(Math.max(1, Math.round(ms / 1000))),
+  });
+  return { ...result, email: result.email || started.email };
 }
 
 export async function circleLoginInit(email: string) {
