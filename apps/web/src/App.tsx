@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   formatUsdc,
   getAgentStatus,
+  getCircleStatus,
   getHealth,
   getLedger,
   getPolicy,
@@ -12,6 +13,7 @@ import {
   toggleMerchant,
   waitForApiReady,
   type AgentStatus,
+  type CircleStatus,
   type Health,
   type Policy,
   type SpendRecord,
@@ -69,8 +71,10 @@ export function App() {
   const [remaining, setRemaining] = useState("0");
   const [health, setHealth] = useState<Health | null>(null);
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
+  const [circleStatus, setCircleStatus] = useState<CircleStatus | null>(null);
   const [workflowRunning, setWorkflowRunning] = useState(false);
   const [workflowMessage, setWorkflowMessage] = useState<string | null>(null);
+  const [loginNotice, setLoginNotice] = useState<string | null>(null);
   const [traceSettlementId, setTraceSettlementId] = useState("");
   const [libraryJobId, setLibraryJobId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -138,7 +142,7 @@ export function App() {
       setError(null);
     }
 
-    const [l, as] = await Promise.allSettled([getLedger(), getAgentStatus()]);
+    const [l, as, cs] = await Promise.allSettled([getLedger(), getAgentStatus(), getCircleStatus()]);
     const ledgerRes = pick(l, "ledger");
     if (ledgerRes) {
       setLedger(ledgerRes.records);
@@ -153,6 +157,8 @@ export function App() {
       setAgentStatus(asRes);
       if (asRes.activityPayerAddresses?.length) setActivityPayerAddresses(asRes.activityPayerAddresses);
     }
+    const csRes = pick(cs, "circle/status");
+    if (csRes) setCircleStatus(csRes);
     return !!policyRes || !!healthRes;
   }, []);
 
@@ -279,6 +285,10 @@ export function App() {
   }
 
   const activeNav = NAV.find((n) => n.id === tab)!;
+  const userWallet =
+    circleStatus?.loggedIn && circleStatus.executorAddress
+      ? circleStatus.executorAddress
+      : agentStatus?.circleExecutorAddress ?? null;
 
   return (
     <div className="app-shell">
@@ -321,10 +331,12 @@ export function App() {
               <span className="topbar-crumb-sep" aria-hidden>/</span>
               <span className="topbar-crumb-current">{activeNav.label}</span>
             </nav>
-            {health?.seller && (
+            {userWallet ? (
               <span className="topbar-meta">
-                Seller <code>{shortAddr(health.seller)}</code>
+                Wallet <code title={userWallet}>{shortAddr(userWallet)}</code>
               </span>
+            ) : (
+              <span className="topbar-meta muted">Log in to connect your wallet</span>
             )}
           </div>
 
@@ -333,14 +345,34 @@ export function App() {
               <MetricChip
                 label="Gateway"
                 value={
-                  agentStatus?.gatewayBalanceUsdc != null
-                    ? `$${formatUsdc(agentStatus.gatewayBalanceUsdc)}`
+                  (circleStatus?.gatewayBalanceUsdc ?? agentStatus?.gatewayBalanceUsdc) != null
+                    ? `$${formatUsdc(circleStatus?.gatewayBalanceUsdc ?? agentStatus?.gatewayBalanceUsdc ?? "0")}`
                     : "—"
                 }
-                variant={Number(agentStatus?.gatewayBalanceUsdc ?? 0) === 0 ? "warning" : "default"}
+                variant={
+                  Number(circleStatus?.gatewayBalanceUsdc ?? agentStatus?.gatewayBalanceUsdc ?? 0) === 0
+                    ? "warning"
+                    : "default"
+                }
                 accent
               />
-              <CircleLoginPanel variant="toolbar" onReady={refresh} />
+              <CircleLoginPanel
+                variant="toolbar"
+                onReady={refresh}
+                onLoginSuccess={(info) => {
+                  const parts: string[] = [];
+                  if (info.executorAddress) {
+                    parts.push(`Wallet ${shortAddr(info.executorAddress)} connected`);
+                  }
+                  if (info.funding?.walletFund?.ok) {
+                    parts.push(info.funding.walletFund.message ?? "Testnet USDC funded");
+                  }
+                  if (info.funding?.gatewayDeposit?.ok) {
+                    parts.push(info.funding.gatewayDeposit.message ?? "Gateway funded for x402");
+                  }
+                  if (parts.length) setLoginNotice(parts.join(" · "));
+                }}
+              />
               <MetricChip label="Mode" value={live ? "Live" : "Dev"} variant={live ? "success" : "default"} />
             </div>
 
@@ -374,6 +406,12 @@ export function App() {
         </header>
 
         <div className="main-inner">
+          {loginNotice && (
+            <div className="inline-alert success">
+              {loginNotice}
+            </div>
+          )}
+
           {workflowMessage && tab === "marketplace" && (
             <div
               className={`inline-alert ${

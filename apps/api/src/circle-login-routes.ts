@@ -72,9 +72,8 @@ async function handleLoginVerify(
     const emailHint = String(req.body?.email ?? "").trim();
     const otpPrefixHint = String(req.body?.otpPrefix ?? "").trim();
     const testnet = req.body?.testnet !== false;
-    const { circleLoginVerifyAsync, circleListAgentWallets, ensureCircleExecutor } = await import(
-      "./circle-cli.ts"
-    );
+    const { circleLoginVerifyAsync, circleListAgentWallets, ensureCircleExecutor, fundCircleAgentAfterLogin } =
+      await import("./circle-cli.ts");
     const { saveCircleConfig, resolveCircleExecutorAddress, resolveCircleChain } = await import(
       "./circle-config.ts"
     );
@@ -101,13 +100,27 @@ async function handleLoginVerify(
     if (first && !resolveCircleExecutorAddress()) {
       saveCircleConfig({ executorAddress: first, chain });
     }
-    ensureCircleExecutor();
+    const executor = ensureCircleExecutor() ?? resolveCircleExecutorAddress();
+    let funding: Awaited<ReturnType<typeof fundCircleAgentAfterLogin>> | undefined;
+    if (executor) {
+      try {
+        funding = await fundCircleAgentAfterLogin(executor, chain);
+      } catch (fundErr) {
+        funding = {
+          walletFund: {
+            ok: false,
+            error: fundErr instanceof Error ? fundErr.message : "Auto-fund failed",
+          },
+        };
+      }
+    }
     res.json({
       ok: true,
       email: savedEmail ?? result.email,
       message: result.message,
       wallets,
-      executorAddress: ensureCircleExecutor() ?? resolveCircleExecutorAddress(),
+      executorAddress: executor,
+      funding,
     });
   } catch (error) {
     res.status(500).json({

@@ -778,12 +778,18 @@ export function circleWalletListJson(chain?: string): string | null {
   return r.stdout?.trim() ?? null;
 }
 
+function defaultGatewayDepositMethod(chain: string): "eco" | "direct" {
+  return chain.toUpperCase().includes("ARC") ? "direct" : "eco";
+}
+
 export function circleGatewayDeposit(params: {
   amount: string;
   address: string;
   chain?: string;
+  method?: "eco" | "direct";
 }): CirclePayResult {
   const chain = params.chain ?? resolveCircleChain();
+  const method = params.method ?? defaultGatewayDepositMethod(chain);
   const r = runCircle(
     [
       "gateway",
@@ -795,9 +801,121 @@ export function circleGatewayDeposit(params: {
       "--chain",
       chain,
       "--method",
-      "eco",
+      method,
+      "--output",
+      "json",
     ],
     { timeout: 120_000 }
   );
-  return { ok: r.status === 0, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+  const combined = `${r.stderr ?? ""}\n${r.stdout ?? ""}`.trim();
+  return {
+    ok: r.status === 0,
+    stdout: r.stdout ?? "",
+    stderr: r.stderr ?? "",
+    error: r.status === 0 ? undefined : formatPaymentError(combined),
+  };
+}
+
+export async function circleGatewayDepositAsync(params: {
+  amount: string;
+  address: string;
+  chain?: string;
+  method?: "eco" | "direct";
+}): Promise<CirclePayResult> {
+  const chain = params.chain ?? resolveCircleChain();
+  const method = params.method ?? defaultGatewayDepositMethod(chain);
+  const r = await runCircleAsync(
+    [
+      "gateway",
+      "deposit",
+      "--amount",
+      params.amount,
+      "--address",
+      params.address,
+      "--chain",
+      chain,
+      "--method",
+      method,
+      "--output",
+      "json",
+    ],
+    180_000
+  );
+  const combined = `${r.stderr}\n${r.stdout}`.trim();
+  return {
+    ok: r.ok,
+    stdout: r.stdout,
+    stderr: r.stderr,
+    error: r.ok ? undefined : formatPaymentError(combined),
+  };
+}
+
+export interface CircleFundStepResult {
+  ok: boolean;
+  message?: string;
+  error?: string;
+}
+
+export async function circleWalletFundTestnet(
+  address: string,
+  chain?: string
+): Promise<CircleFundStepResult> {
+  const resolved = chain ?? resolveCircleChain();
+  const { ok, data, raw, err } = await runCircleJsonAsync(
+    ["wallet", "fund", "--address", address, "--chain", resolved, "--token", "usdc"],
+    90_000
+  );
+  const message = circleOutputText(data, raw);
+  if (ok) {
+    return { ok: true, message: message || "Testnet USDC sent to your agent wallet." };
+  }
+  const text = `${err}\n${raw}`.trim();
+  if (/already|recent|limit|sufficient|enough/i.test(text)) {
+    return { ok: true, message: "Wallet already has testnet USDC." };
+  }
+  return { ok: false, error: message || err || text || "Wallet fund failed" };
+}
+
+/** Circle faucet + Gateway deposit so new logins can pay x402 merchants immediately. */
+export async function fundCircleAgentAfterLogin(
+  address: string,
+  chain?: string
+): Promise<{ walletFund: CircleFundStepResult; gatewayDeposit?: CircleFundStepResult }> {
+  const resolved = chain ?? resolveCircleChain();
+  const walletFund = await circleWalletFundTestnet(address, resolved);
+  if (!walletFund.ok) {
+    return { walletFund };
+  }
+
+  await new Promise((r) => setTimeout(r, 2_000));
+  const depositAmount = (process.env.BUTLER_AUTO_GATEWAY_DEPOSIT_USDC ?? "5").trim();
+  const dep = await circleGatewayDepositAsync({
+    amount: depositAmount,
+    address,
+    chain: resolved,
+    method: "direct",
+  });
+  const gatewayDeposit: CircleFundStepResult = dep.ok
+    ? {
+        ok: true,
+        message: `Deposited ${depositAmount} USDC to Gateway for x402 payments.`,
+      }
+    : {
+        ok: false,
+        error: dep.error ?? dep.stderr || dep.stdout || "Gateway deposit failed",
+      };
+
+  if (dep.ok) {
+    invalidateCircleCache();
+    scheduleGatewayBalanceRefresh(address);
+    const parsed = parseGatewayBalanceUsdc(dep.stdout);
+    if (parsed) {
+      saveCircleConfig({
+        gatewayBalanceUsdc: parsed,
+        gatewayBalanceAt: Math.floor(Date.now() / 1000),
+      });
+    }
+  }
+
+  return { walletFund, gatewayDeposit };
 }

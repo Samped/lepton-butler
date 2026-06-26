@@ -88,9 +88,14 @@ function measurePopoverPos(chip: HTMLButtonElement | null) {
 
 export function CircleLoginPanel({
   onReady,
+  onLoginSuccess,
   variant = "toolbar",
 }: {
   onReady?: () => void;
+  onLoginSuccess?: (info: {
+    executorAddress: string | null;
+    funding?: import("../api.ts").CircleLoginFunding;
+  }) => void;
   variant?: "sidebar" | "toolbar";
 }) {
   const saved = loadSession();
@@ -262,6 +267,10 @@ export function CircleLoginPanel({
       setOtp("");
       setOpen(false);
       await refresh();
+      onLoginSuccess?.({
+        executorAddress: res.executorAddress ?? null,
+        funding: res.funding,
+      });
       onReady?.();
     } catch (e) {
       const err = e as Error & { needsNewCode?: boolean };
