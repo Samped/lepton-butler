@@ -1,4 +1,5 @@
 import { config } from "dotenv";
+import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import cors from "cors";
@@ -12,16 +13,22 @@ const PORT = Number(process.env.PORT ?? process.env.API_PORT ?? 3001);
 const WEB_URL = process.env.WEB_URL ?? `http://localhost:${process.env.WEB_PORT ?? 5174}`;
 const SELLER = (process.env.BUTLER_SELLER_ADDRESS ?? "0x933a2405f84c224be1ef373ba16e992e1f459682") as `0x${string}`;
 
+mkdirSync(resolve(__dirname, "../../../.data/circle-home"), { recursive: true });
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 let ready = false;
+let resolveRoutesReady!: () => void;
+const routesReady = new Promise<void>((resolve) => {
+  resolveRoutesReady = resolve;
+});
 
-/** While heavy routes load, avoid 404s that confuse the dashboard bootstrap. */
+/** Wait for route registration instead of failing mid-boot (login, policy, etc.). */
 app.use((req, res, next) => {
-  if (ready || req.path === "/api/health") return next();
-  res.status(503).json({ ok: false, mode: "starting", error: "API still starting" });
+  if (req.path === "/api/health") return next();
+  void routesReady.then(() => next());
 });
 
 app.get("/api/health", (_req, res) => {
@@ -40,6 +47,7 @@ app.listen(PORT, () => {
     .then(({ loadRoutes }) => {
       loadRoutes(app);
       ready = true;
+      resolveRoutesReady();
       console.log(`Butler API ready · dashboard: ${WEB_URL}`);
     })
     .catch((error) => {

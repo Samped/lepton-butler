@@ -167,13 +167,17 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = defaultT
           continue;
         }
         let detail = `${res.status} ${path}`;
+        let needsNewCode = false;
         try {
-          const body = (await res.json()) as { error?: string; ok?: boolean };
+          const body = (await res.json()) as { error?: string; ok?: boolean; needsNewCode?: boolean };
           if (body.error) detail = body.error;
+          needsNewCode = !!body.needsNewCode;
         } catch {
           /* ignore non-JSON error bodies */
         }
-        throw new Error(detail);
+        const err = new Error(detail) as Error & { needsNewCode?: boolean };
+        if (needsNewCode) err.needsNewCode = true;
+        throw err;
       }
       return (await res.json()) as T;
     } catch (err) {
@@ -247,45 +251,24 @@ export function circleLoginInit(email: string) {
   );
 }
 
-export async function circleLoginVerify(requestId: string, otp: string, email?: string) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 90_000);
-  try {
-    const res = await fetch(`${API}/api/circle/login/verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ requestId, otp, testnet: true, email }),
-      signal: controller.signal,
-    });
-    let body: {
-      ok?: boolean;
-      error?: string;
-      needsNewCode?: boolean;
-      email?: string;
-      message?: string;
-      wallets?: CircleAgentWallet[];
-      executorAddress?: string | null;
-    } = {};
-    try {
-      body = (await res.json()) as typeof body;
-    } catch {
-      body = {};
-    }
-    if (!res.ok) {
-      const err = new Error(body.error ?? `Login failed (${res.status})`) as Error & { needsNewCode?: boolean };
-      err.needsNewCode = body.needsNewCode;
-      throw err;
-    }
-    return {
-      ok: true,
-      email: body.email,
-      message: body.message,
-      wallets: body.wallets ?? [],
-      executorAddress: body.executorAddress ?? null,
-    };
-  } finally {
-    clearTimeout(timer);
-  }
+export function circleLoginVerify(requestId: string, otp: string, email?: string) {
+  return request<{
+    ok?: boolean;
+    email?: string;
+    message?: string;
+    wallets?: CircleAgentWallet[];
+    executorAddress?: string | null;
+  }>("/api/circle/login/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ requestId, otp, testnet: true, email }),
+  }, IS_LOCAL_API ? 90_000 : 45_000).then((body) => ({
+    ok: true as const,
+    email: body.email,
+    message: body.message,
+    wallets: body.wallets ?? [],
+    executorAddress: body.executorAddress ?? null,
+  }));
 }
 
 export function circleLogout() {

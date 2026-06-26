@@ -15,18 +15,33 @@ import { IconChevronDown, IconWallet } from "../icons.tsx";
 type Step = "email" | "otp";
 
 const SESSION_KEY = "butler.circleLogin";
+const SESSION_TTL_MS = 15 * 60 * 1000;
 
-function loadSession(): { requestId?: string; email?: string; otpPrefix?: string; hint?: string } | null {
+type SavedSession = {
+  requestId?: string;
+  email?: string;
+  otpPrefix?: string;
+  hint?: string;
+  savedAt?: number;
+};
+
+function loadSession(): SavedSession | null {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
-    return raw ? (JSON.parse(raw) as { requestId?: string; email?: string; otpPrefix?: string; hint?: string }) : null;
+    if (!raw) return null;
+    const data = JSON.parse(raw) as SavedSession;
+    if (!data.savedAt || Date.now() - data.savedAt > SESSION_TTL_MS) {
+      clearSession();
+      return null;
+    }
+    return data;
   } catch {
     return null;
   }
 }
 
 function saveSession(data: { requestId: string; email: string; otpPrefix?: string; hint?: string }) {
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...data, savedAt: Date.now() }));
 }
 
 function clearSession() {
@@ -297,6 +312,8 @@ export function CircleLoginPanel({
                       {hint ?? "Enter the 6-digit code from your email"}
                     </>
                   )}
+                  <br />
+                  <span className="muted">No email? Tap <strong>Resend</strong> — codes expire after 15 minutes.</span>
                 </p>
                 <input
                   className="field-input"

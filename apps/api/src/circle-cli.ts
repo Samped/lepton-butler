@@ -4,13 +4,22 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveCircleExecutorAddress, resolveCircleChain, saveCircleConfig, loadCircleConfig } from "./circle-config.ts";
 import { formatPaymentError } from "./payment-errors.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+
+function circleHomeDir(): string {
+  const home = process.env.CIRCLE_HOME?.trim() || resolve(ROOT, ".data", "circle-home");
+  return home;
+}
+
+function circleChildEnv(): NodeJS.ProcessEnv {
+  const home = circleHomeDir();
+  return { ...process.env, HOME: home, FORCE_COLOR: "0", CIRCLE_ACCEPT_TERMS: "1" };
+}
 
 /** Resolve circle binary: vendored script → PATH → global. */
 export function resolveCircleBin(): string {
@@ -25,7 +34,7 @@ function runCircle(args: string[], opts?: { timeout?: number }): ReturnType<type
   const isScript = bin.endsWith(".sh");
   return spawnSync(isScript ? "bash" : bin, isScript ? [bin, ...args] : args, {
     encoding: "utf8",
-    env: { ...process.env, FORCE_COLOR: "0", CIRCLE_ACCEPT_TERMS: "1" },
+    env: circleChildEnv(),
     timeout: opts?.timeout,
   });
 }
@@ -42,7 +51,7 @@ function circleOutputText(data: Record<string, unknown> | null, raw: string): st
 }
 
 function loginRequestPath(requestId: string): string {
-  return join(homedir(), ".circle", "login-requests", `${requestId}.json`);
+  return join(circleHomeDir(), ".circle", "login-requests", `${requestId}.json`);
 }
 
 function readLoginRequest(requestId: string): { otpHead?: string; email?: string } | undefined {
@@ -322,7 +331,7 @@ function runCircleAsync(args: string[], timeout = 45_000): Promise<{ ok: boolean
     const bin = resolveCircleBin();
     const isScript = bin.endsWith(".sh");
     const child = spawn(isScript ? "bash" : bin, isScript ? [bin, ...args] : args, {
-      env: { ...process.env, FORCE_COLOR: "0", CIRCLE_ACCEPT_TERMS: "1" },
+      env: circleChildEnv(),
     });
     let stdout = "";
     let stderr = "";
@@ -486,6 +495,12 @@ function parseCircleLoginInitResult(
   }
   if (!requestId) {
     return { ok: false, error: message || "No request ID returned from Circle CLI" };
+  }
+  if (!existsSync(loginRequestPath(requestId))) {
+    return {
+      ok: false,
+      error: "Circle did not create a login session. Check your email or try Send login code again.",
+    };
   }
   const otpPrefix = readOtpPrefix(requestId);
   return { ok: true, requestId, email, message, otpPrefix };
