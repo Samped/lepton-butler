@@ -16,6 +16,8 @@ services:
     startCommand: npm run start -w @butler/api
     healthCheckPath: /api/health
     envVars:
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=460"
       - key: NODE_VERSION
         value: "20"
       - key: BUTLER_USE_CIRCLE_CLI
