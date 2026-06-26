@@ -24,6 +24,7 @@ const SESSION_TTL_MS = 15 * 60 * 1000;
 
 type SavedSession = {
   requestId?: string;
+  jobId?: string;
   email?: string;
   otpPrefix?: string;
   hint?: string;
@@ -45,7 +46,13 @@ function loadSession(): SavedSession | null {
   }
 }
 
-function saveSession(data: { requestId: string; email: string; otpPrefix?: string; hint?: string }) {
+function saveSession(data: {
+  requestId?: string;
+  jobId?: string;
+  email: string;
+  otpPrefix?: string;
+  hint?: string;
+}) {
   sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...data, savedAt: Date.now() }));
 }
 
@@ -102,14 +109,16 @@ export function CircleLoginPanel({
   const [requestId, setRequestId] = useState<string | null>(saved?.requestId ?? null);
   const [otpPrefix, setOtpPrefix] = useState<string | null>(saved?.otpPrefix ?? null);
   const [otp, setOtp] = useState("");
-  const [step, setStep] = useState<Step>(saved?.requestId ? "otp" : "email");
+  const [step, setStep] = useState<Step>(saved?.requestId || saved?.jobId ? "otp" : "email");
   const [wallets, setWallets] = useState<CircleAgentWallet[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(saved?.hint ?? null);
   const [busy, setBusy] = useState(false);
   const [sendElapsed, setSendElapsed] = useState(0);
   const [awaitingSession, setAwaitingSession] = useState(false);
-  const [open, setOpen] = useState(() => Boolean(saved?.requestId));
+  const [codeSent, setCodeSent] = useState(Boolean(saved?.requestId || saved?.jobId));
+  const [pendingJobId, setPendingJobId] = useState<string | null>(saved?.jobId ?? null);
+  const [open, setOpen] = useState(() => Boolean(saved?.requestId || saved?.jobId));
   const [popoverPos, setPopoverPos] = useState<{ top: number; right: number; width: number } | null>(
     null
   );
@@ -119,7 +128,64 @@ export function CircleLoginPanel({
 
   const connected = status?.loggedIn ?? false;
   const showOtpEntry =
-    step === "otp" || awaitingSession || Boolean(requestId) || (busy && email.includes("@"));
+    step === "otp" ||
+    awaitingSession ||
+    Boolean(requestId) ||
+    Boolean(pendingJobId) ||
+    codeSent ||
+    (busy && email.includes("@"));
+
+  const linkingSession = showOtpEntry && !requestId && (awaitingSession || Boolean(pendingJobId));
+
+  const applyLoginJobResult = useCallback(
+    (res: { requestId: string; otpPrefix?: string; hint?: string }) => {
+      setRequestId(res.requestId);
+      setOtpPrefix(res.otpPrefix ?? null);
+      setHint(res.hint ?? null);
+      setPendingJobId(null);
+      setAwaitingSession(false);
+      setCodeSent(true);
+      saveSession({
+        requestId: res.requestId,
+        email,
+        otpPrefix: res.otpPrefix,
+        hint: res.hint,
+      });
+    },
+    [email]
+  );
+
+  useEffect(() => {
+    if (!pendingJobId || requestId) return;
+    let cancelled = false;
+    setAwaitingSession(true);
+    void (async () => {
+      try {
+        const res = await pollCircleLoginJob(pendingJobId, {
+          onPending: () => {
+            if (!cancelled) setAwaitingSession(true);
+          },
+        });
+        if (!cancelled && res.requestId) {
+          applyLoginJobResult(res);
+          setError(null);
+        }
+      } catch (e) {
+        if (cancelled) return;
+        const msg = e instanceof Error ? e.message : "Failed to link session";
+        if (/Cannot reach API|502|503|504|waking up/i.test(msg)) {
+          setError("API is waking up — keep this open. Your email code is still valid.");
+        } else {
+          setError(msg);
+        }
+      } finally {
+        if (!cancelled) setAwaitingSession(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingJobId, requestId, applyLoginJobResult]);
 
   const refresh = useCallback(async () => {
     try {
@@ -178,6 +244,8 @@ export function CircleLoginPanel({
   const goToEmail = () => {
     setStep("email");
     setRequestId(null);
+    setPendingJobId(null);
+    setCodeSent(false);
     setOtp("");
     setOtpPrefix(null);
     setHint(null);
@@ -192,41 +260,21 @@ export function CircleLoginPanel({
     setOpen(true);
     setPopoverPos(measurePopoverPos(chipRef.current));
     setAwaitingSession(true);
+    setCodeSent(false);
+    setPendingJobId(null);
+    setRequestId(null);
     setOtp("");
     setSendElapsed(0);
     const tick = window.setInterval(() => setSendElapsed((s) => s + 1), 1_000);
     try {
-      await wakeApiForLogin();
       const started = await startCircleLoginJob(email);
-      const res = await Promise.race([
-        pollCircleLoginJob(started.jobId, {
-          onPending: () => setAwaitingSession(true),
-        }),
-        new Promise<never>((_, reject) =>
-          window.setTimeout(
-            () => reject(new Error("Still waiting on Circle — you can enter your code and tap Verify, or tap Resend.")),
-            IS_LOCAL_API ? 90_000 : 125_000
-          )
-        ),
-      ]);
-      if (!res?.requestId) {
-        throw new Error("Code may have been sent — enter it below and tap Verify, or tap Resend.");
-      }
-      setRequestId(res.requestId);
-      setOtpPrefix(res.otpPrefix ?? null);
-      setHint(res.hint ?? null);
-      saveSession({
-        requestId: res.requestId,
-        email,
-        otpPrefix: res.otpPrefix,
-        hint: res.hint,
-      });
+      setCodeSent(true);
+      setPendingJobId(started.jobId);
+      saveSession({ jobId: started.jobId, email });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to send OTP";
       setError(msg);
-      // Stay on OTP step so the user can paste a code they already received.
     } finally {
-      setAwaitingSession(false);
       window.clearInterval(tick);
       setBusy(false);
     }
@@ -234,14 +282,18 @@ export function CircleLoginPanel({
 
   const handleVerify = async () => {
     if (!requestId || busy) {
-      setError("Session expired. Click Resend code.");
+      setError(
+        linkingSession
+          ? "Still linking your session — wait a few seconds, or tap Resend if this persists."
+          : "Session expired. Tap Resend code."
+      );
       setStep("otp");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      await wakeApiForLogin(45_000);
+      await wakeApiForLogin(90_000);
       const res = await circleLoginVerify(
         requestId,
         formatOtpForVerify(otp, otpPrefix),
@@ -365,11 +417,21 @@ export function CircleLoginPanel({
         ) : showOtpEntry ? (
           <>
             <p className="payer-otp-hint">
-              {awaitingSession || (busy && !requestId) ? (
+              {linkingSession ? (
                 <>
-                  Sending to <strong>{email}</strong>… check your inbox.
-                  <br />
-                  <span className="muted">Enter the code below as soon as it arrives.</span>
+                  {codeSent ? (
+                    <>
+                      Code sent to <strong>{email}</strong>
+                      <br />
+                      <span className="muted">Linking session with the API… you can paste your code now.</span>
+                    </>
+                  ) : (
+                    <>
+                      Sending to <strong>{email}</strong>…
+                      <br />
+                      <span className="muted">Check your inbox in a moment.</span>
+                    </>
+                  )}
                 </>
               ) : (
                 <>
@@ -408,7 +470,7 @@ export function CircleLoginPanel({
                 disabled={busy || !requestId || otpDigits(otp) < 6}
                 onClick={handleVerify}
               >
-                {busy && requestId ? "Verifying…" : !requestId ? "Linking session…" : "Verify"}
+                {linkingSession ? "Linking session…" : busy && requestId ? "Verifying…" : "Verify"}
               </button>
               <button type="button" className="btn ghost sm" disabled={busy} onClick={handleSendOtp}>
                 Resend

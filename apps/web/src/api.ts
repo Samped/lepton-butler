@@ -211,8 +211,8 @@ async function request<T>(
 
 export const getHealth = () => request<Health>("/api/health", undefined, IS_LOCAL_API ? 15_000 : 25_000, 3);
 
-/** Wake Render free tier before Circle login (health can take 30–60s when asleep). */
-export async function wakeApiForLogin(maxWaitMs = IS_LOCAL_API ? 10_000 : 75_000): Promise<void> {
+/** Wake Render free tier before Circle login (health can take 30–90s when asleep). */
+export async function wakeApiForLogin(maxWaitMs = IS_LOCAL_API ? 15_000 : 120_000): Promise<void> {
   const started = Date.now();
   let delay = 2_000;
   while (Date.now() - started < maxWaitMs) {
@@ -223,7 +223,7 @@ export async function wakeApiForLogin(maxWaitMs = IS_LOCAL_API ? 10_000 : 75_000
       /* retry */
     }
     await new Promise((r) => setTimeout(r, delay));
-    delay = Math.min(delay + 1_000, 6_000);
+    delay = Math.min(delay + 1_000, 8_000);
   }
 }
 
@@ -276,6 +276,7 @@ export type CircleLoginInitResult = {
 };
 
 export async function startCircleLoginJob(email: string) {
+  await wakeApiForLogin();
   return request<{ pending?: boolean; jobId: string; email: string }>(
     "/api/circle/login/init",
     {
@@ -283,16 +284,19 @@ export async function startCircleLoginJob(email: string) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, testnet: true }),
     },
-    12_000,
-    6
+    IS_LOCAL_API ? 15_000 : 30_000,
+    IS_LOCAL_API ? 4 : 12
   );
 }
+
+const LOGIN_POLL_TIMEOUT = IS_LOCAL_API ? 15_000 : 25_000;
+const LOGIN_POLL_RETRIES = IS_LOCAL_API ? 3 : 12;
 
 export async function pollCircleLoginJob(
   jobId: string,
   opts?: { onPending?: (elapsedMs: number) => void }
 ): Promise<CircleLoginInitResult> {
-  const deadline = Date.now() + (IS_LOCAL_API ? 90_000 : 120_000);
+  const deadline = Date.now() + (IS_LOCAL_API ? 120_000 : 180_000);
   let delay = 1_500;
   while (Date.now() < deadline) {
     let status: {
@@ -306,15 +310,22 @@ export async function pollCircleLoginJob(
       elapsedMs?: number;
     };
     try {
-      status = await request(`/api/circle/login/init/${jobId}`, undefined, 12_000, 2);
+      status = await request(
+        `/api/circle/login/init/${jobId}`,
+        undefined,
+        LOGIN_POLL_TIMEOUT,
+        LOGIN_POLL_RETRIES
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Poll failed";
       if (/job not found|expired/i.test(msg)) {
         throw new Error("Server restarted while sending the code. Tap Resend, then enter the new code.");
       }
-      if (/502|503|504|Cannot reach API/i.test(msg)) {
+      if (/502|503|504|Cannot reach API|timed out|waking up/i.test(msg)) {
+        opts?.onPending?.(Date.now());
+        await wakeApiForLogin(30_000);
         await new Promise((r) => setTimeout(r, delay));
-        delay = Math.min(delay + 500, 3_000);
+        delay = Math.min(delay + 500, 4_000);
         continue;
       }
       throw err;
@@ -322,7 +333,7 @@ export async function pollCircleLoginJob(
 
     if (status.status === "pending") {
       opts?.onPending?.(status.elapsedMs ?? 0);
-      if ((status.elapsedMs ?? 0) > 120_000) {
+      if ((status.elapsedMs ?? 0) > 150_000) {
         throw new Error("Circle did not respond in time. Tap Resend and try again.");
       }
       await new Promise((r) => setTimeout(r, delay));
@@ -344,7 +355,7 @@ export async function pollCircleLoginJob(
       otpPrefix: status.otpPrefix,
     };
   }
-  throw new Error("No code received after 2 minutes. Tap Resend to try again.");
+  throw new Error("Still linking your session — keep this open and tap Resend if it takes over 3 minutes.");
 }
 
 export async function circleLoginInit(email: string) {
