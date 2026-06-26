@@ -598,6 +598,7 @@ app.listen(PORT, () => {
   console.log(`Butler API http://localhost:${PORT}`);
   console.log(`  dashboard: ${WEB_URL}`);
   console.log(`  seller: ${SELLER}`);
+  console.log(`  circleCli: ${circleCliInstalled() ? "installed" : "MISSING — run bash scripts/ensure-circle-cli.sh in build"}`);
   console.log(`  merchants: /merchants/research/*, /merchants/bills/*, /merchants/data/*`);
   console.log(`  marketplace: /api/marketplace · /marketplace/agents/*/execute (x402)`);
 });

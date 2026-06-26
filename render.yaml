@@ -12,7 +12,7 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: NODE_ENV=development npm run install:full && python3 scripts/install-circle-cli.py
+    buildCommand: NODE_ENV=development npm run install:render
     startCommand: npm run start -w @butler/api
     healthCheckPath: /api/health
     envVars:
