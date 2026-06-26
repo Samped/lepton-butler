@@ -7,6 +7,7 @@ import {
   getCircleWallets,
   setCircleExecutor,
   shortAddr,
+  waitForApiReady,
   type CircleAgentWallet,
   type CircleStatus,
 } from "../api.ts";
@@ -124,6 +125,7 @@ export function CircleLoginPanel({
     setError(null);
     setOpen(true);
     try {
+      await waitForApiReady();
       const res = await circleLoginInit(email);
       if (!res?.requestId) {
         throw new Error("Code may have been sent, but the session ID was missing. Click Resend code.");

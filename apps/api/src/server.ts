@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import cors from "cors";
 import express from "express";
 import { ARC_EIP155, resolveArcRpc } from "@butler/arc";
+import { loadCoreRoutes } from "./load-core-routes.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(__dirname, "../../../.env") });
@@ -43,11 +44,13 @@ app.get("/api/health", (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Butler API http://localhost:${PORT} (booting…)`);
+  loadCoreRoutes(app);
+  ready = true;
+  resolveRoutesReady();
+  console.log(`Butler API core ready · Circle login available`);
   void import("./load-routes.ts")
     .then(({ loadRoutes }) => {
       loadRoutes(app);
-      ready = true;
-      resolveRoutesReady();
       console.log(`Butler API ready · dashboard: ${WEB_URL}`);
     })
     .catch((error) => {
