@@ -368,12 +368,27 @@ export async function sendLoginCode(
   email: string,
   onProgress?: (elapsedSec: number) => void
 ): Promise<CircleLoginInitResult & { email: string }> {
-  await wakeApiForLogin();
-  const started = await startCircleLoginJob(email);
-  const result = await pollCircleLoginJob(started.jobId, {
-    onPending: (ms) => onProgress?.(Math.max(1, Math.round(ms / 1000))),
-  });
-  return { ...result, email: result.email || started.email };
+  let lastErr: Error | null = null;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      await wakeApiForLogin(IS_LOCAL_API ? 20_000 : 150_000);
+      const started = await startCircleLoginJob(email);
+      const result = await pollCircleLoginJob(started.jobId, {
+        onPending: (ms) => onProgress?.(Math.max(1, Math.round(ms / 1000))),
+      });
+      return { ...result, email: result.email || started.email };
+    } catch (err) {
+      lastErr = err instanceof Error ? err : new Error(String(err));
+      const retryable =
+        attempt < 4 &&
+        /API is down|Bad Gateway|Cannot reach API|502|503|504|timed out|waking up|unavailable/i.test(
+          lastErr.message
+        );
+      if (!retryable) throw lastErr;
+      await new Promise((r) => setTimeout(r, attempt * 3_000));
+    }
+  }
+  throw lastErr ?? new Error("Failed to send login code");
 }
 
 export async function circleLoginInit(email: string) {

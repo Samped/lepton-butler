@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node ../../node_modules/tsx/dist/cli.mjs watch src/server.ts",
     "start": "node ../../node_modules/tsx/dist/cli.mjs src/server.ts",
+    "build:render": "node build.mjs",
+    "start:render": "node dist/server.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -17,6 +19,7 @@
     "@x402/evm": "2.16.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
+    "esbuild": "^0.25.0",
     "express": "^5.2.1",
     "tsx": "^4.21.0"
   },

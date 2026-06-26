@@ -12,8 +12,8 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm run install:render
-    startCommand: BUTLER_LITE_API=true npm run start -w @butler/api
+    buildCommand: npm run install:render && npm run build:render -w @butler/api
+    startCommand: BUTLER_LITE_API=true npm run start:render -w @butler/api
     healthCheckPath: /api/health
     envVars:
       - key: RENDER

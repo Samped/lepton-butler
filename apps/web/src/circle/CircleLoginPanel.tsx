@@ -75,6 +75,26 @@ function otpDigits(value: string): number {
   return value.replace(/\D/g, "").length;
 }
 
+const EMAIL_DOMAIN_FIXES: Record<string, string> = {
+  "gamil.com": "gmail.com",
+  "gmial.com": "gmail.com",
+  "gmal.com": "gmail.com",
+  "gnail.com": "gmail.com",
+  "hotmial.com": "hotmail.com",
+  "yaho.com": "yahoo.com",
+};
+
+function fixEmailTypos(email: string): { email: string; corrected: boolean } {
+  const trimmed = email.trim().toLowerCase();
+  const at = trimmed.lastIndexOf("@");
+  if (at < 0) return { email: trimmed, corrected: false };
+  const local = trimmed.slice(0, at);
+  const domain = trimmed.slice(at + 1);
+  const fixed = EMAIL_DOMAIN_FIXES[domain];
+  if (!fixed) return { email: trimmed, corrected: false };
+  return { email: `${local}@${fixed}`, corrected: true };
+}
+
 function measurePopoverPos(chip: HTMLButtonElement | null) {
   if (!chip) return null;
   const rect = chip.getBoundingClientRect();
@@ -102,6 +122,7 @@ export function CircleLoginPanel({
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<Step>(saved?.requestId ? "otp" : "email");
   const [wallets, setWallets] = useState<CircleAgentWallet[]>([]);
+  const [emailHint, setEmailHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(saved?.hint ?? null);
   const [busy, setBusy] = useState(false);
@@ -175,6 +196,13 @@ export function CircleLoginPanel({
 
   const handleSendOtp = async () => {
     if (!email.includes("@") || busy) return;
+    const { email: sendTo, corrected } = fixEmailTypos(email);
+    if (corrected) {
+      setEmail(sendTo);
+      setEmailHint(`Using ${sendTo} (fixed typo in domain)`);
+    } else {
+      setEmailHint(null);
+    }
     setBusy(true);
     setError(null);
     setStep("otp");
@@ -185,13 +213,13 @@ export function CircleLoginPanel({
     setSendElapsed(0);
     const tick = window.setInterval(() => setSendElapsed((s) => s + 1), 1_000);
     try {
-      const res = await sendLoginCode(email);
+      const res = await sendLoginCode(sendTo);
       setRequestId(res.requestId);
       setOtpPrefix(res.otpPrefix ?? null);
       setHint(res.hint ?? null);
       saveSession({
         requestId: res.requestId,
-        email,
+        email: sendTo,
         otpPrefix: res.otpPrefix,
         hint: res.hint,
       });
@@ -199,7 +227,7 @@ export function CircleLoginPanel({
       const msg = e instanceof Error ? e.message : "Failed to send code";
       setError(
         /API is down|Bad Gateway|Cannot reach API|unavailable/i.test(msg)
-          ? `${msg} The backend on Render may be redeploying — try again in 2–3 minutes.`
+          ? "Server is waking up on Render (free tier). Wait 60 seconds, open the health link below, then tap Resend."
           : msg
       );
     } finally {
@@ -461,10 +489,23 @@ export function CircleLoginPanel({
             >
               Send login code
             </button>
+            {emailHint && <p className="muted small" style={{ margin: "0.35rem 0 0" }}>{emailHint}</p>}
           </>
         )}
 
-        {error && <p className="payer-error">{error}</p>}
+        {error && (
+          <p className="payer-error">
+            {error}
+            {/waking up|API is down|Bad Gateway/i.test(error) && (
+              <>
+                {" "}
+                <a href={`${import.meta.env.VITE_API_URL || "https://butler-api-x7lh.onrender.com"}/api/health`} target="_blank" rel="noreferrer">
+                  Check API health
+                </a>
+              </>
+            )}
+          </p>
+        )}
       </div>
     ) : null;
 
