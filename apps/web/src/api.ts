@@ -150,8 +150,10 @@ function sessionHeaders(init?: RequestInit): Headers {
 const rawApi = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
 /** Prod on Vercel: empty → same-origin /api/* (proxied in vercel.json). Dev: localhost:3001. */
 const API = rawApi || (import.meta.env.DEV ? "http://localhost:3001" : "");
+/** Empty API in prod = Vercel proxy — not local dev. */
 export const IS_LOCAL_API =
-  !API || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(API.replace(/\/$/, ""));
+  import.meta.env.DEV ||
+  (!!API && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(API.replace(/\/$/, "")));
 
 function defaultTimeoutMs(): number {
   return IS_LOCAL_API ? 20_000 : 90_000;
