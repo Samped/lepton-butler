@@ -7,6 +7,7 @@ import express from "express";
 import { ARC_EIP155, resolveArcRpc } from "@butler/arc";
 import { registerCircleLoginRoutes } from "./circle-login-routes.ts";
 import { resumePendingLoginJobs } from "./circle-login-jobs.ts";
+import { userSessionMiddleware } from "./user-session.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(__dirname, "../../../.env") });
@@ -23,8 +24,13 @@ const SELLER = (process.env.BUTLER_SELLER_ADDRESS ?? "0x933a2405f84c224be1ef373b
 mkdirSync(resolve(__dirname, "../../../.data/circle-home"), { recursive: true });
 
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    allowedHeaders: ["Content-Type", "Authorization", "X-Butler-Session"],
+  })
+);
 app.use(express.json());
+app.use(userSessionMiddleware);
 
 let ready = false;
 let resolveRoutesReady!: () => void;

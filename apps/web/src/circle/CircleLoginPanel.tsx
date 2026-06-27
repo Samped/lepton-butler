@@ -8,6 +8,7 @@ import {
   getCircleStatus,
   getCircleWallets,
   pollCircleLoginJob,
+  resetBrowserSessionId,
   resolveLoginRequestId,
   setCircleExecutor,
   shortAddr,
@@ -393,6 +394,7 @@ export function CircleLoginPanel({
     setBusy(true);
     try {
       await circleLogout();
+      resetBrowserSessionId();
       goToEmail();
       setOpen(false);
       setShowFundModal(false);

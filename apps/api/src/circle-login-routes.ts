@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { getCircleLoginInitJob, startCircleLoginInitJob } from "./circle-login-jobs.ts";
+import { getUserSessionPaths } from "./user-session.ts";
 
 /** Minimal login routes — registered before heavy imports so init/verify respond immediately. */
 export function registerCircleLoginRoutes(app: Express): void {
@@ -11,7 +12,8 @@ export function registerCircleLoginRoutes(app: Express): void {
         return;
       }
       const testnet = req.body?.testnet !== false;
-      const jobId = startCircleLoginInitJob(email, testnet);
+      const sessionId = getUserSessionPaths()?.sessionId;
+      const jobId = startCircleLoginInitJob(email, testnet, sessionId);
       res.status(202).json({ pending: true, jobId, email });
     } catch (error) {
       res.status(500).json({

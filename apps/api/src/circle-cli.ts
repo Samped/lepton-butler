@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveCircleExecutorAddress, resolveCircleChain, saveCircleConfig, loadCircleConfig } from "./circle-config.ts";
+import { getUserSessionPaths, hasActiveUserSession } from "./user-session.ts";
 import { formatPaymentError } from "./payment-errors.ts";
 import {
   backupLoginRequestSession,
@@ -18,6 +19,8 @@ import {
 const ROOT = process.env.BUTLER_ROOT?.trim() || resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 function circleHomeDir(): string {
+  const sessionHome = getUserSessionPaths()?.circleHome;
+  if (sessionHome) return sessionHome;
   const home = process.env.CIRCLE_HOME?.trim() || resolve(ROOT, ".data", "circle-home");
   return home;
 }
@@ -161,7 +164,11 @@ async function runCircleJsonAsync(
   return { ok: r.ok, data, raw, err };
 }
 
-let probeCache: { at: number; probe: CircleProbeResult } | null = null;
+let probeCache: { at: number; sessionId: string; probe: CircleProbeResult } | null = null;
+
+function currentSessionCacheKey(): string {
+  return getUserSessionPaths()?.sessionId ?? "";
+}
 let loginCache: { at: number; loggedIn: boolean } | null = null;
 let runnableCache: { at: number; ok: boolean } | null = null;
 
@@ -175,6 +182,7 @@ export interface CircleProbeResult {
 
 /** Use saved login + executor when CLI probe is slow (wallet status can take 45s+). */
 function sessionFromStoredConfig(): { loggedIn: boolean; email?: string } {
+  if (!hasActiveUserSession()) return { loggedIn: false };
   const cfg = loadCircleConfig();
   if (!cfg.executorAddress?.startsWith("0x") || !cfg.email?.includes("@")) {
     return { loggedIn: false };
@@ -258,7 +266,7 @@ function refreshProbeFromCli(preferTestnet: boolean): CircleProbeResult {
     testnet: session.testnet ?? stored.loggedIn,
     email: session.email ?? stored.email,
   };
-  probeCache = { at: now, probe };
+  probeCache = { at: now, sessionId: currentSessionCacheKey(), probe };
   runnableCache = { at: now, ok: probe.runnable };
   loginCache = { at: now, loggedIn: probe.loggedIn };
   return probe;
@@ -288,7 +296,7 @@ function scheduleProbeRefresh(preferTestnet = true): void {
         testnet: session.testnet ?? stored.loggedIn,
         email: session.email ?? stored.email,
       };
-      probeCache = { at: now, probe };
+      probeCache = { at: now, sessionId: currentSessionCacheKey(), probe };
       runnableCache = { at: now, ok: probe.runnable };
       loginCache = { at: now, loggedIn: probe.loggedIn };
     })
@@ -299,11 +307,22 @@ function scheduleProbeRefresh(preferTestnet = true): void {
 
 export function probeCircleCli(preferTestnet = true): CircleProbeResult {
   const now = Date.now();
+  if (!hasActiveUserSession()) {
+    const probe: CircleProbeResult = {
+      runnable: circleCliInstalled() && quickCircleRunnable(),
+      loggedIn: false,
+      testnet: preferTestnet,
+    };
+    return probe;
+  }
   const cacheMs = probeCache?.probe.loggedIn ? 300_000 : 30_000;
-  if (probeCache && now - probeCache.at < cacheMs) return probeCache.probe;
+  const cacheKey = currentSessionCacheKey();
+  if (probeCache && probeCache.sessionId === cacheKey && now - probeCache.at < cacheMs) {
+    return probeCache.probe;
+  }
   if (!circleCliInstalled()) {
     const probe = { runnable: false, loggedIn: false };
-    probeCache = { at: now, probe };
+    probeCache = { at: now, sessionId: currentSessionCacheKey(), probe };
     return probe;
   }
   const stored = sessionFromStoredConfig();
@@ -314,7 +333,7 @@ export function probeCircleCli(preferTestnet = true): CircleProbeResult {
       testnet: preferTestnet,
       email: stored.email,
     };
-    probeCache = { at: now, probe };
+    probeCache = { at: now, sessionId: currentSessionCacheKey(), probe };
     runnableCache = { at: now, ok: true };
     loginCache = { at: now, loggedIn: true };
     scheduleProbeRefresh(preferTestnet);
@@ -326,7 +345,7 @@ export function probeCircleCli(preferTestnet = true): CircleProbeResult {
       loggedIn: false,
       testnet: preferTestnet,
     };
-    probeCache = { at: now, probe };
+    probeCache = { at: now, sessionId: currentSessionCacheKey(), probe };
     runnableCache = { at: now, ok: true };
     loginCache = { at: now, loggedIn: false };
     scheduleProbeRefresh(preferTestnet);

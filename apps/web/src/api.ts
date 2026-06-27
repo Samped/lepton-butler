@@ -111,6 +111,42 @@ export interface AgentRunResult {
   remainingDailyUsdc: string;
 }
 
+const BROWSER_SESSION_KEY = "butler.browserSession";
+
+/** Per-browser id — isolates Circle login on the shared API server. */
+export function getBrowserSessionId(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    let id = localStorage.getItem(BROWSER_SESSION_KEY);
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
+      id = crypto.randomUUID();
+      localStorage.setItem(BROWSER_SESSION_KEY, id);
+    }
+    return id;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
+/** New session after sign-out so the next login is isolated. */
+export function resetBrowserSessionId(): string {
+  const id = crypto.randomUUID();
+  try {
+    localStorage.setItem(BROWSER_SESSION_KEY, id);
+  } catch {
+    /* ignore */
+  }
+  return id;
+}
+
+function sessionHeaders(init?: RequestInit): Headers {
+  const headers = new Headers(init?.headers as HeadersInit | undefined);
+  if (typeof window !== "undefined") {
+    headers.set("X-Butler-Session", getBrowserSessionId());
+  }
+  return headers;
+}
+
 const rawApi = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
 /** Prod on Vercel: empty → same-origin /api/* (proxied in vercel.json). Dev: localhost:3001. */
 const API = rawApi || (import.meta.env.DEV ? "http://localhost:3001" : "");
@@ -159,7 +195,11 @@ async function request<T>(
     try {
       let res: Response;
       try {
-        res = await fetch(`${API}${path}`, { ...init, signal: controller.signal });
+        res = await fetch(`${API}${path}`, {
+          ...init,
+          headers: sessionHeaders(init),
+          signal: controller.signal,
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (err instanceof Error && err.name === "AbortError") {

@@ -18,6 +18,7 @@ type LoginInitJob = {
   status: "pending" | "ok" | "error";
   email: string;
   testnet: boolean;
+  sessionId?: string;
   result?: CircleLoginInitResult;
   startedAt: number;
 };
@@ -91,25 +92,33 @@ function updateJob(jobId: string, patch: Partial<LoginInitJob>): void {
   saveJob(jobId, job);
 }
 
-function runLoginJob(jobId: string, email: string, testnet: boolean): void {
+function runLoginJob(jobId: string, email: string, testnet: boolean, sessionId?: string): void {
   void (async () => {
-    try {
-      const { circleCliInstalled, circleLoginInitAsync } = await import("./circle-cli.ts");
-      if (!circleCliInstalled()) {
-        fail(jobId, "Circle CLI not installed on the server. Redeploy the API on Render.");
-        return;
+    const run = async () => {
+      try {
+        const { circleCliInstalled, circleLoginInitAsync } = await import("./circle-cli.ts");
+        if (!circleCliInstalled()) {
+          fail(jobId, "Circle CLI not installed on the server. Redeploy the API on Render.");
+          return;
+        }
+        const result = await circleLoginInitAsync(email, testnet, 120_000);
+        if (result.ok && result.requestId) {
+          const { backupLoginRequestSession } = await import("./circle-login-session.ts");
+          backupLoginRequestSession(result.requestId);
+        }
+        updateJob(jobId, {
+          status: result.ok ? "ok" : "error",
+          result,
+        });
+      } catch (error) {
+        fail(jobId, error instanceof Error ? error.message : "Failed to send OTP");
       }
-      const result = await circleLoginInitAsync(email, testnet, 120_000);
-      if (result.ok && result.requestId) {
-        const { backupLoginRequestSession } = await import("./circle-login-session.ts");
-        backupLoginRequestSession(result.requestId);
-      }
-      updateJob(jobId, {
-        status: result.ok ? "ok" : "error",
-        result,
-      });
-    } catch (error) {
-      fail(jobId, error instanceof Error ? error.message : "Failed to send OTP");
+    };
+    if (sessionId) {
+      const { runWithUserSession } = await import("./user-session.ts");
+      runWithUserSession(sessionId, () => void run());
+    } else {
+      void run();
     }
   })();
 }
@@ -129,7 +138,7 @@ export function resumePendingLoginJobs(): void {
         continue;
       }
       if (age > 3_000 && !jobs.has(jobId)) {
-        runLoginJob(jobId, job.email, job.testnet);
+        runLoginJob(jobId, job.email, job.testnet, job.sessionId);
       }
     }
   } catch {
@@ -137,11 +146,11 @@ export function resumePendingLoginJobs(): void {
   }
 }
 
-export function startCircleLoginInitJob(email: string, testnet = true): string {
+export function startCircleLoginInitJob(email: string, testnet = true, sessionId?: string): string {
   pruneJobs();
   const jobId = randomUUID();
-  saveJob(jobId, { status: "pending", email, testnet, startedAt: Date.now() });
-  runLoginJob(jobId, email, testnet);
+  saveJob(jobId, { status: "pending", email, testnet, sessionId, startedAt: Date.now() });
+  runLoginJob(jobId, email, testnet, sessionId);
   return jobId;
 }
 
