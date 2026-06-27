@@ -12,7 +12,6 @@ import {
   shortAddr,
   toggleAgent,
   toggleMerchant,
-  IS_LOCAL_API,
   type AgentStatus,
   type CircleStatus,
   type Health,
