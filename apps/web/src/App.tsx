@@ -380,9 +380,12 @@ export function App() {
                 variant="toolbar"
                 onReady={refresh}
                 onLoginSuccess={(info) => {
-                  if (info.executorAddress) {
-                    setLoginNotice(`Logged in · wallet ${shortAddr(info.executorAddress)}`);
-                  }
+                  setLoginNotice(
+                    info.executorAddress
+                      ? `Logged in · wallet ${shortAddr(info.executorAddress)}`
+                      : "Logged in with Circle"
+                  );
+                  void refresh();
                 }}
               />
               <MetricChip label="Mode" value={live ? "Live" : "Dev"} variant={live ? "success" : "default"} />
