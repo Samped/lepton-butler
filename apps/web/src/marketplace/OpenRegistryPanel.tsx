@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MARKETPLACE_AGENTS, externalBaselineCredit } from "@butler/core";
+import { MARKETPLACE_AGENTS, type MarketplaceAgent } from "@butler/core/marketplace";
 import {
   formatUsdc,
   getAgentRegistry,
@@ -12,9 +12,21 @@ import {
 } from "../api.ts";
 import { IconChevronDown, IconSearch } from "../icons.tsx";
 
+function baselineCredit(agent: MarketplaceAgent, score = 72) {
+  return {
+    agentId: agent.id,
+    score,
+    successRate: 100,
+    tasksCompleted: 0,
+    revenueUsdc: "0",
+    avgEtaSeconds: agent.etaSeconds,
+    reliability: 85,
+  };
+}
+
 function builtinRegistryFallback(apiOrigin: string): AgentRegistryResponse {
   const agents: (MarketplaceAgentCard & { approved?: boolean })[] = MARKETPLACE_AGENTS.map((a) => {
-    const credit = externalBaselineCredit({ ...a, origin: "local" });
+    const credit = baselineCredit(a);
     return {
       ...a,
       origin: "local" as const,
