@@ -9,6 +9,10 @@
       "source": "/api/:path*",
       "destination": "http://129.151.164.101:3001/api/:path*"
     },
+    {
+      "source": "/marketplace/:path*",
+      "destination": "http://129.151.164.101:3001/marketplace/:path*"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

@@ -46,7 +46,7 @@ function parsePolicy(): ExternalAgentPolicy {
     domainAllowlist,
     maxPriceUsdc: Number(process.env.BUTLER_EXTERNAL_MAX_PRICE_USDC ?? "0.25") || 0.25,
     baselineReputation: Number(process.env.BUTLER_EXTERNAL_BASELINE_REPUTATION ?? "72") || 72,
-    openDiscovery: process.env.BUTLER_OPEN_DISCOVERY === "true",
+    openDiscovery: process.env.BUTLER_OPEN_DISCOVERY !== "false",
     requireX402Verified: process.env.BUTLER_EXTERNAL_REQUIRE_X402 !== "false",
   };
 }

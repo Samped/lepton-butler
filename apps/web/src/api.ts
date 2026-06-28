@@ -937,11 +937,16 @@ export function runButler(body: {
   auctionMode?: AuctionMode;
   forceX402?: boolean;
 }) {
-  return request<ButlerResult>("/api/butler/run", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  }, 300_000);
+  return request<ButlerResult>(
+    "/api/butler/run",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    300_000,
+    1
+  );
 }
 
 /** @deprecated Use runButler */

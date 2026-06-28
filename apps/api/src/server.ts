@@ -26,6 +26,7 @@ mkdirSync(resolve(__dirname, "../../../.data/circle-home"), { recursive: true })
 const app = express();
 
 let ready = false;
+let taskRoutesReady = false;
 let resolveRoutesReady!: () => void;
 const routesReady = new Promise<void>((resolve) => {
   resolveRoutesReady = resolve;
@@ -34,8 +35,8 @@ const routesReady = new Promise<void>((resolve) => {
 /** Liveness probe — registered first; no RPC calls that can hang. */
 app.get("/api/health", (_req, res) => {
   res.json({
-    ok: ready,
-    mode: ready ? "live" : "starting",
+    ok: ready && taskRoutesReady,
+    mode: !ready ? "starting" : !taskRoutesReady ? "loading" : "live",
     chain: ARC_EIP155,
     seller: SELLER,
   });
@@ -84,7 +85,6 @@ app.use((req, res, next) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Butler API http://localhost:${PORT} (booting…)`);
   ready = true;
-  resolveRoutesReady();
   resumePendingLoginJobs();
   console.log(`Butler API login ready · Circle OTP`);
 
@@ -97,25 +97,34 @@ app.listen(PORT, "0.0.0.0", () => {
       console.error("Butler API failed to load core routes:", error);
     });
 
+  const markTaskRoutesReady = () => {
+    taskRoutesReady = true;
+    resolveRoutesReady();
+  };
+
   setImmediate(() => {
     if (process.env.BUTLER_LITE_API === "true") {
       void import("./load-task-routes.ts")
         .then(({ loadTaskRoutes }) => loadTaskRoutes(app))
         .then(() => {
+          markTaskRoutesReady();
           console.log("Butler API lite mode — task routes loaded (full marketplace: BUTLER_LITE_API=false)");
         })
         .catch((error) => {
           console.error("Butler API failed to load task routes:", error);
+          markTaskRoutesReady();
         });
       return;
     }
     void import("./load-routes.ts")
       .then(({ loadRoutes }) => loadRoutes(app))
       .then(() => {
+        markTaskRoutesReady();
         console.log(`Butler API ready · dashboard: ${WEB_URL}`);
       })
       .catch((error) => {
         console.error("Butler API failed to load heavy routes (login still works):", error);
+        markTaskRoutesReady();
       });
   });
 });

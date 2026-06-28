@@ -28,8 +28,11 @@ export function formatWorkflowError(raw: string): string {
       return "API is busy with a Butler run — health check timed out. Your task may still complete in Library.";
     }
     if (/butler|payer-agent/i.test(text)) {
-      return "Butler is still processing (auctions + x402 can take 3–5 minutes). Check Library in a moment — your deliverable may already be there.";
+      return "Butler could not finish in time. The API may be offline or missing x402 agent routes — retry after the server restarts.";
     }
+  }
+  if (/cannot reach api|backend server may be offline/i.test(text)) {
+    return "Cannot reach Butler API — the server at getbutler.xyz may be down. Retry in 30s or restart butler-api on the Oracle VM.";
   }
   if (/signal is aborted/i.test(text)) {
     return "Request was cancelled or timed out. Keep this tab open while Butler runs (auctions can take 1–3 minutes).";

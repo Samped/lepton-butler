@@ -3,6 +3,8 @@ import { resolveExpressBrief, resolveDeepWorkRouting } from "../brief-intent.ts"
 import {
   formatUsdc,
   getMarketplaceDeliverables,
+  getButlerReadiness,
+  getHealthQuick,
   runButler,
   type AuctionMode,
   type ButlerResult,
@@ -191,6 +193,28 @@ export function AgentChatView({
     };
 
     try {
+      const [health, readiness] = await Promise.all([
+        getHealthQuick(),
+        getButlerReadiness().catch(() => null),
+      ]);
+      if (!health?.ok) {
+        pushMessage({
+          role: "assistant",
+          content:
+            "Butler API is offline or still loading routes. Wait 30 seconds and retry. If this persists, the server needs a restart (oracle-recover.sh on the VM).",
+          error: true,
+        });
+        return;
+      }
+      if (readiness && !readiness.canRun) {
+        pushMessage({
+          role: "assistant",
+          content: readiness.reason ?? "Payer not ready — log in with Circle and fund Gateway USDC.",
+          error: true,
+        });
+        return;
+      }
+
       const result = await runButler({
         brief: task,
         category: express?.category ?? category,

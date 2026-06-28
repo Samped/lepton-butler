@@ -13,7 +13,7 @@ let memoryApproved: Set<string> | null = null;
 let memoryPath: string | null = null;
 
 export function requireAgentApproval(): boolean {
-  return process.env.BUTLER_REQUIRE_AGENT_APPROVAL !== "false";
+  return process.env.BUTLER_REQUIRE_AGENT_APPROVAL === "true";
 }
 
 function defaultApprovals(): AgentApprovalsFile {

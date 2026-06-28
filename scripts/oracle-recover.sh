@@ -35,10 +35,16 @@ fi
 
 echo "Waiting for health…"
 for i in 1 2 3 4 5 6 7 8 9 10; do
-  if curl -sf --max-time 3 http://127.0.0.1:3001/api/health | grep -q '"ok"'; then
+  if curl -sf --max-time 3 http://127.0.0.1:3001/api/health | grep -q '"ok":true'; then
     echo "OK — API is responding locally"
     curl -s http://127.0.0.1:3001/api/health
     echo ""
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:3001/marketplace/agents/research-agent/execute || echo "000")
+    if [[ "$code" == "402" ]]; then
+      echo "OK — x402 agent execute routes live (HTTP 402)"
+    else
+      echo "WARN — research-agent execute returned HTTP $code (expected 402). Pull latest and rebuild."
+    fi
     exit 0
   fi
   sleep 2

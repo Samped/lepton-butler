@@ -7,6 +7,8 @@ Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/agent
 Environment=BUTLER_LITE_API=true
+Environment=BUTLER_API_URL=https://getbutler.xyz
+Environment=BUTLER_INTERNAL_API_URL=http://127.0.0.1:3001
 Environment=BUTLER_ROOT=/home/ubuntu/agent
 Environment=NODE_OPTIONS=--max-old-space-size=768
 ExecStart=/bin/bash /home/ubuntu/agent/scripts/render-start.sh

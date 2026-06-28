@@ -17,6 +17,13 @@ function resolveApiBase(): string {
   return `http://127.0.0.1:${PORT}`;
 }
 
+/** Circle CLI pays from this host — use loopback so x402 execute paths are not proxied via Vercel. */
+function resolvePaymentApiBase(): string {
+  const internal = process.env.BUTLER_INTERNAL_API_URL?.trim();
+  if (internal) return internal.replace(/\/$/, "");
+  return `http://127.0.0.1:${PORT}`;
+}
+
 export async function loadTaskRoutes(app: Express): Promise<void> {
   const [
     { agentRunReadiness },
@@ -99,7 +106,7 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
     try {
       const result = await runButler({
         brief,
-        apiBase: resolveApiBase(),
+        apiBase: resolvePaymentApiBase(),
         statePath: STATE_PATH,
         sellerAddress: SELLER,
         strategy: req.body?.strategy === "direct" ? "direct" : "auction",
@@ -129,12 +136,59 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
   app.get("/api/payer-agent/readiness", butlerReadiness);
   app.post("/api/payer-agent/run", butlerRun);
 
-  const { registerRegistryRoutes } = await import("./registry-routes.ts");
-  registerRegistryRoutes(app, {
-    apiBase: resolveApiBase(),
+  const [
+    { registerRegistryRoutes },
+    { createMarketplaceGateway, registerAgentExecuteRoutes },
+    { buildJobSummary, inferPlanFromJob },
+    { loadMarketplaceState },
+  ] = await Promise.all([
+    import("./registry-routes.ts"),
+    import("./marketplace-execute.ts"),
+    import("./marketplace-task.ts"),
+    import("@butler/core"),
+  ]);
+
+  const apiBase = resolveApiBase();
+  registerRegistryRoutes(app, { apiBase, statePath: STATE_PATH, sellerAddress: SELLER });
+
+  const gateway = await createMarketplaceGateway(SELLER);
+  registerAgentExecuteRoutes(app, gateway, {
     statePath: STATE_PATH,
+    policyStatePath: STATE_PATH,
     sellerAddress: SELLER,
   });
 
-  console.log("  task routes: policy · ledger · agent/status · butler/run · registry (lite mode)");
+  function loadMp() {
+    return loadMarketplaceState(STATE_PATH, SELLER);
+  }
+
+  app.get("/api/marketplace/jobs", (_req, res) => {
+    res.json(loadMp().jobs.slice(-50).reverse());
+  });
+
+  app.get("/api/marketplace/jobs/:id", (req, res) => {
+    const job = loadMp().jobs.find((j) => j.id === req.params.id);
+    if (!job) {
+      res.status(404).json({ error: "Job not found" });
+      return;
+    }
+    res.json({ ...job, plan: job.plan ?? inferPlanFromJob(job), summary: buildJobSummary(job) });
+  });
+
+  app.get("/api/marketplace/deliverables", (_req, res) => {
+    const jobs = loadMp()
+      .jobs.filter((j) => j.status === "completed")
+      .slice(-50)
+      .reverse()
+      .map((j) => ({
+        ...j,
+        plan: j.plan ?? inferPlanFromJob(j),
+        summary: buildJobSummary(j),
+      }));
+    res.json(jobs);
+  });
+
+  console.log(
+    "  task routes: policy · ledger · agent/status · butler/run · registry · x402 execute · deliverables (lite mode)"
+  );
 }

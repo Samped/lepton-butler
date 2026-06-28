@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { MARKETPLACE_AGENTS, externalBaselineCredit } from "@butler/core";
 import {
   formatUsdc,
   getAgentRegistry,
@@ -10,6 +11,43 @@ import {
   type MarketplaceAgentCard,
 } from "../api.ts";
 import { IconChevronDown, IconSearch } from "../icons.tsx";
+
+function builtinRegistryFallback(apiOrigin: string): AgentRegistryResponse {
+  const agents: (MarketplaceAgentCard & { approved?: boolean })[] = MARKETPLACE_AGENTS.map((a) => {
+    const credit = externalBaselineCredit({ ...a, origin: "local" });
+    return {
+      ...a,
+      origin: "local" as const,
+      approved: true,
+      credit,
+      quote: {
+        agentId: a.id,
+        name: a.name,
+        priceUsdc: a.priceUsdc,
+        etaSeconds: a.etaSeconds,
+        reputation: credit.score,
+        successRate: credit.successRate,
+        tasksCompleted: credit.tasksCompleted,
+        serviceUrl: `${apiOrigin.replace(/\/$/, "")}${a.servicePath}`,
+      },
+    };
+  });
+  return {
+    policy: {
+      domainAllowlist: [],
+      maxPriceUsdc: 0.25,
+      baselineReputation: 72,
+      openDiscovery: true,
+      requireX402Verified: true,
+      requireAgentApproval: false,
+    },
+    registryPath: "builtin",
+    agents,
+    local: agents.length,
+    external: 0,
+    approvedCount: agents.length,
+  };
+}
 
 export function OpenRegistryPanel({ onStatsChange }: { onStatsChange?: () => void }) {
   const [registry, setRegistry] = useState<AgentRegistryResponse | null>(null);
@@ -36,7 +74,14 @@ export function OpenRegistryPanel({ onStatsChange }: { onStatsChange?: () => voi
       setError(null);
       onStatsChange?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load registry");
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      setRegistry(builtinRegistryFallback(origin));
+      setError(
+        e instanceof Error
+          ? `${e.message} — showing built-in Butler agents offline`
+          : "API unavailable — showing built-in Butler agents offline"
+      );
+      onStatsChange?.();
     }
   }, [onStatsChange]);
 
@@ -88,7 +133,7 @@ export function OpenRegistryPanel({ onStatsChange }: { onStatsChange?: () => voi
   const agents = registry?.agents ?? [];
   const local = agents.filter((a) => a.origin !== "external");
   const external = agents.filter((a) => a.origin === "external");
-  const approvalRequired = registry?.policy?.requireAgentApproval !== false;
+  const approvalRequired = registry?.policy?.requireAgentApproval === true;
   const approvedCount = registry?.approvedCount ?? agents.filter((a) => a.approved).length;
 
   return (
