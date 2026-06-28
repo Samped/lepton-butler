@@ -144,6 +144,7 @@ export function CircleLoginPanel({
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(saved?.hint ?? null);
   const [busy, setBusy] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendElapsed, setSendElapsed] = useState(0);
   const [open, setOpen] = useState(false);
@@ -156,6 +157,7 @@ export function CircleLoginPanel({
   const rootRef = useRef<HTMLDivElement>(null);
   const chipRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const otpInputRef = useRef<HTMLInputElement>(null);
   const skipResumePoll = useRef(false);
   const sendInFlightRef = useRef(false);
 
@@ -197,14 +199,20 @@ export function CircleLoginPanel({
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (step === "otp" || busy || sending || showFundModal) return;
+      if (step === "otp" || verifying || sending || showFundModal) return;
       const target = e.target as Node;
       if (rootRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
       setOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [open, step, busy, sending, showFundModal]);
+  }, [open, step, verifying, sending, showFundModal]);
+
+  useEffect(() => {
+    if (step !== "otp" || !open) return;
+    const t = window.setTimeout(() => otpInputRef.current?.focus(), 0);
+    return () => window.clearTimeout(t);
+  }, [step, open]);
 
   const goToEmail = () => {
     setStep("email");
@@ -238,8 +246,8 @@ export function CircleLoginPanel({
     });
   };
 
-  const handleSendCode = async () => {
-    if (!email.includes("@") || busy || sending || sendInFlightRef.current) return;
+  const handleSendCode = () => {
+    if (!email.includes("@") || verifying || sendInFlightRef.current) return;
     const { email: sendTo, corrected } = fixEmailTypos(email);
     if (corrected) {
       setEmail(sendTo);
@@ -252,7 +260,6 @@ export function CircleLoginPanel({
     setStep("otp");
     setOpen(true);
     setPopoverPos(measurePopoverPos(chipRef.current, true) ?? fallbackPopoverPos(true));
-    setBusy(true);
     setSending(true);
     setError(null);
     setSendElapsed(0);
@@ -260,39 +267,36 @@ export function CircleLoginPanel({
     setOtp("");
     skipResumePoll.current = true;
     saveSession({ email: sendTo });
-    let startedJobId: string | null = null;
     const tick = window.setInterval(() => setSendElapsed((s) => s + 1), 1_000);
-    try {
-      const res = await beginLoginCodeSend(sendTo, {
-        onJobStarted: ({ jobId: id }) => {
-          startedJobId = id;
-          setJobId(id);
-          saveSession({ jobId: id, email: sendTo });
-        },
-        onProgress: (sec) => setSendElapsed(Math.max(sec, 1)),
-      });
-      setJobId(res.jobId);
-      applyLoginJobResult(res, { jobId: res.jobId, email: sendTo });
-    } catch (e) {
-      if (startedJobId) {
+
+    void (async () => {
+      let startedJobId: string | null = null;
+      try {
+        const res = await beginLoginCodeSend(sendTo, {
+          onJobStarted: ({ jobId: id }) => {
+            startedJobId = id;
+            setJobId(id);
+            saveSession({ jobId: id, email: sendTo });
+          },
+          onProgress: (sec) => setSendElapsed(Math.max(sec, 1)),
+        });
+        setJobId(res.jobId);
+        applyLoginJobResult(res, { jobId: res.jobId, email: sendTo });
+        setError(null);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Could not confirm the code was sent.";
         setError(
-          e instanceof Error
-            ? e.message
-            : "If you received the email, enter the code below and tap Verify & log in."
+          startedJobId
+            ? `${msg} If you received the email, enter the code below and tap Verify & log in.`
+            : `${msg} If you already received a code, enter it below and tap Verify & log in.`
         );
-      } else {
-        setStep("email");
-        setJobId(null);
-        clearSession();
-        setError(e instanceof Error ? e.message : "Could not send code. Try again.");
+      } finally {
+        window.clearInterval(tick);
+        setSending(false);
+        sendInFlightRef.current = false;
+        skipResumePoll.current = false;
       }
-    } finally {
-      window.clearInterval(tick);
-      setSending(false);
-      setBusy(false);
-      sendInFlightRef.current = false;
-      skipResumePoll.current = false;
-    }
+    })();
   };
 
   useEffect(() => {
@@ -319,8 +323,8 @@ export function CircleLoginPanel({
   }, [jobId, requestId, connected, step, email]);
 
   const handleVerify = async () => {
-    if (otpDigits(otp) < 6 || busy) return;
-    setBusy(true);
+    if (otpDigits(otp) < 6 || verifying) return;
+    setVerifying(true);
     setError(null);
     setVerifyHint("Connecting…");
     try {
@@ -382,7 +386,7 @@ export function CircleLoginPanel({
         goToEmail();
       }
     } finally {
-      setBusy(false);
+      setVerifying(false);
       setVerifyHint(null);
     }
   };
@@ -534,7 +538,7 @@ export function CircleLoginPanel({
                   Sending to <strong>{email}</strong>
                   {sendElapsed > 0 ? ` (${sendElapsed}s)` : ""}.
                   <br />
-                  <span className="muted">Got the email? Enter the code below while we finish connecting.</span>
+                  <span className="muted">Enter the code below as soon as it arrives — you can type while we connect.</span>
                 </>
               ) : (
                 <>
@@ -554,6 +558,7 @@ export function CircleLoginPanel({
               Verification code
             </label>
             <input
+              ref={otpInputRef}
               id="butler-otp-input"
               className="field-input payer-otp-input"
               placeholder={otpPrefix ? `${otpPrefix}-123456` : "ABC-123456"}
@@ -561,23 +566,22 @@ export function CircleLoginPanel({
               onChange={(e) => setOtp(e.target.value)}
               autoComplete="one-time-code"
               inputMode="text"
-              autoFocus
-              disabled={busy}
+              disabled={verifying}
               aria-label="Email verification code"
               onKeyDown={(e) => {
-                if (e.key === "Enter" && otpDigits(otp) >= 6 && !busy) void handleVerify();
+                if (e.key === "Enter" && otpDigits(otp) >= 6 && !verifying) void handleVerify();
               }}
             />
             <button
               type="button"
               className="btn primary sm payer-popover-btn"
-              disabled={busy || otpDigits(otp) < 6}
+              disabled={verifying || otpDigits(otp) < 6}
               onClick={() => void handleVerify()}
             >
-              {busy ? verifyHint ?? "Logging in…" : "Verify & log in"}
+              {verifying ? verifyHint ?? "Logging in…" : "Verify & log in"}
             </button>
-            {verifyHint && busy && <p className="muted small payer-send-status">{verifyHint}</p>}
-            <button type="button" className="btn ghost sm payer-link-btn" disabled={busy || sending} onClick={goToEmail}>
+            {verifyHint && verifying && <p className="muted small payer-send-status">{verifyHint}</p>}
+            <button type="button" className="btn ghost sm payer-link-btn" disabled={verifying} onClick={goToEmail}>
               Use a different email
             </button>
           </>
@@ -602,7 +606,7 @@ export function CircleLoginPanel({
             <button
               type="button"
               className="btn primary sm payer-popover-btn"
-              disabled={sending || busy || !email.includes("@")}
+              disabled={sending || verifying || !email.includes("@")}
               onClick={() => void handleSendCode()}
             >
               {sending ? `Sending code…${sendElapsed > 0 ? ` (${sendElapsed}s)` : ""}` : "Send code"}
