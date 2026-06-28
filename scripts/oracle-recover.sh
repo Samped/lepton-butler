@@ -25,8 +25,18 @@ elif command -v lsof >/dev/null 2>&1; then
 fi
 sleep 1
 
-echo "Pulling latest…"
-git pull origin main
+echo "Syncing repo to origin/main…"
+if [[ -d .git ]]; then
+  if ! git diff --quiet || ! git diff --cached --quiet; then
+    echo "  Discarding local tracked changes (deploy VM should match git)…"
+    git status --short
+  fi
+  git fetch origin main
+  git reset --hard origin/main
+  git clean -fd -e .env -e '.data/**' 2>/dev/null || true
+else
+  echo "WARN: $ROOT is not a git repo — skipping pull"
+fi
 
 echo "Installing / building API…"
 npm run install:render
