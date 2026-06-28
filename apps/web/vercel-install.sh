@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Run from apps/web (Vercel root) or repo root — always installs monorepo web workspace.
+# Vercel install — delegate to repo script that adds @butler/web to workspaces.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-cd "$ROOT"
-npm install -w @butler/web
+exec bash "$ROOT/scripts/vercel-install.sh"
