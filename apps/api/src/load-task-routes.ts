@@ -129,5 +129,12 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
   app.get("/api/payer-agent/readiness", butlerReadiness);
   app.post("/api/payer-agent/run", butlerRun);
 
-  console.log("  task routes: policy · ledger · agent/status · butler/run (lite mode)");
+  const { registerRegistryRoutes } = await import("./registry-routes.ts");
+  registerRegistryRoutes(app, {
+    apiBase: resolveApiBase(),
+    statePath: STATE_PATH,
+    sellerAddress: SELLER,
+  });
+
+  console.log("  task routes: policy · ledger · agent/status · butler/run · registry (lite mode)");
 }

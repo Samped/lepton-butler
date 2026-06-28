@@ -709,6 +709,7 @@ export interface AgentRegistryResponse {
   registryPath: string;
   approvalsPath?: string;
   approvedCount?: number;
+  sellerAddress?: string;
   agents: (MarketplaceAgentCard & { approved?: boolean })[];
   local: number;
   external: number;
@@ -782,26 +783,41 @@ export const getMarketplaceAgents = () =>
 export const getAgentRegistry = () =>
   request<AgentRegistryResponse>("/api/marketplace/registry", undefined, 20_000);
 
-export function setAgentApproval(agentId: string, approved: boolean) {
+function withSellerWallet(init: RequestInit | undefined, sellerWallet?: string | null): RequestInit {
+  const headers = sessionHeaders(init);
+  if (sellerWallet) headers.set("X-Butler-Seller-Wallet", sellerWallet);
+  return { ...init, headers };
+}
+
+export function setAgentApproval(agentId: string, approved: boolean, sellerWallet?: string | null) {
   return request<{ ok: boolean; agentId: string; approved: boolean; approvedAgentIds: string[] }>(
     "/api/marketplace/registry/approvals",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ agentId, approved }),
-    },
+    withSellerWallet(
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId, approved }),
+      },
+      sellerWallet
+    ),
     15_000
   );
 }
 
-export function probeRegistryUrl(url: string, options?: { name?: string; save?: boolean }) {
+export function probeRegistryUrl(
+  url: string,
+  options?: { name?: string; save?: boolean; sellerWallet?: string | null }
+) {
   return request<{ probe: { ok: boolean; priceUsdc?: string; error?: string }; agent?: MarketplaceAgentCard; error?: string }>(
     "/api/marketplace/registry/probe",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, name: options?.name, save: options?.save ?? true }),
-    },
+    withSellerWallet(
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, name: options?.name, save: options?.save ?? true }),
+      },
+      options?.sellerWallet
+    ),
     30_000
   );
 }

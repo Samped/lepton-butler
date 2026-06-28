@@ -67,6 +67,7 @@ export function getApprovedAgentIds(path?: string): Set<string> {
 
 export function isAgentApproved(agentId: string, path?: string): boolean {
   if (!requireAgentApproval()) return true;
+  if (DEFAULT_LOCAL_IDS.includes(agentId)) return true;
   return getApprovedAgentIds(path ?? memoryPath ?? undefined).has(agentId);
 }
 
