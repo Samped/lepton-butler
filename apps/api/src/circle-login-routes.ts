@@ -74,9 +74,7 @@ async function handleLoginVerify(
     const emailHint = String(req.body?.email ?? "").trim();
     const otpPrefixHint = String(req.body?.otpPrefix ?? "").trim();
     const testnet = req.body?.testnet !== false;
-    const { circleLoginVerifyAsync, circleListAgentWallets, ensureCircleExecutor } = await import(
-      "./circle-cli.ts"
-    );
+    const { circleLoginVerifyAsync, circleListAgentWalletsAsync } = await import("./circle-cli.ts");
     const { saveCircleConfig, resolveCircleExecutorAddress, resolveCircleChain } = await import(
       "./circle-config.ts"
     );
@@ -100,14 +98,12 @@ async function handleLoginVerify(
     const savedEmail = result.email ?? (emailHint.includes("@") ? emailHint : undefined);
     if (savedEmail) saveCircleConfig({ email: savedEmail });
     const chain = resolveCircleChain();
-    const wallets = circleListAgentWallets(chain);
+    const wallets = await circleListAgentWalletsAsync(chain, 20_000);
     const first = wallets[0]?.address as `0x${string}` | undefined;
     if (first) {
       saveCircleConfig({ executorAddress: first, chain });
-    } else {
-      ensureCircleExecutor();
     }
-    const executor = resolveCircleExecutorAddress() ?? ensureCircleExecutor();
+    const executor = resolveCircleExecutorAddress() ?? first ?? null;
     res.json({
       ok: true,
       email: savedEmail ?? result.email,

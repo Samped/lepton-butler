@@ -623,10 +623,7 @@ function parseCircleLoginVerifyResult(
   }
   const message = circleOutputText(data, raw);
   const emailMatch = message.match(/Logged in as (.+)/i) ?? raw.match(/Logged in as (.+)/i);
-  const email =
-    emailMatch?.[1]?.trim() ??
-    readLoginRequestEmail(requestId) ??
-    probeCircleCli(testnet).email;
+  const email = emailMatch?.[1]?.trim() ?? readLoginRequestEmail(requestId);
   return { ok: true, email, message };
 }
 
@@ -642,10 +639,11 @@ export interface CircleAgentWallet {
   name?: string;
 }
 
-export function circleListAgentWallets(chain?: string): CircleAgentWallet[] {
-  const resolved = chain ?? resolveCircleChain();
-  const { ok, data } = runCircleJson(["wallet", "list", "--chain", resolved, "--type", "agent"], 30_000);
-  if (!ok || !data) return [];
+function parseAgentWalletsFromListJson(
+  data: Record<string, unknown> | null,
+  resolved: string
+): CircleAgentWallet[] {
+  if (!data) return [];
   const inner = data.data as Record<string, unknown> | undefined;
   const wallets = inner?.wallets ?? (data as { wallets?: unknown }).wallets;
   if (!Array.isArray(wallets)) return [];
@@ -661,6 +659,26 @@ export function circleListAgentWallets(chain?: string): CircleAgentWallet[] {
       };
     })
     .filter((w): w is CircleAgentWallet => !!w);
+}
+
+export function circleListAgentWallets(chain?: string): CircleAgentWallet[] {
+  const resolved = chain ?? resolveCircleChain();
+  const { ok, data } = runCircleJson(["wallet", "list", "--chain", resolved, "--type", "agent"], 30_000);
+  if (!ok) return [];
+  return parseAgentWalletsFromListJson(data, resolved);
+}
+
+export async function circleListAgentWalletsAsync(
+  chain?: string,
+  timeoutMs = 20_000
+): Promise<CircleAgentWallet[]> {
+  const resolved = chain ?? resolveCircleChain();
+  const { ok, data } = await runCircleJsonAsync(
+    ["wallet", "list", "--chain", resolved, "--type", "agent"],
+    timeoutMs
+  );
+  if (!ok) return [];
+  return parseAgentWalletsFromListJson(data, resolved);
 }
 
 export function circleGatewayBalance(address: string, chain?: string): { ok: boolean; raw?: string; error?: string } {

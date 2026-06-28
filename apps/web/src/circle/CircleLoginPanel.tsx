@@ -558,6 +558,15 @@ export function CircleLoginPanel({
                   {sendElapsed > 0 ? ` (${sendElapsed}s)` : ""}.
                   <br />
                   <span className="muted">Enter the code below as soon as it arrives — you can type while we connect.</span>
+                  {sendElapsed > 120 ? (
+                    <>
+                      <br />
+                      <span className="muted">
+                        Server is slow or stuck — if verify fails, SSH to the Oracle VM and run{" "}
+                        <code>bash scripts/oracle-recover.sh</code>, then tap Resend for a fresh code.
+                      </span>
+                    </>
+                  ) : null}
                 </>
               ) : (
                 <>

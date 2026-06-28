@@ -230,7 +230,9 @@ async function request<T>(
         }
         let detail =
           res.status === 502 || res.status === 503 || res.status === 504
-            ? `API is waking up (${res.status}). Wait 30s and try again.`
+            ? IS_LOCAL_API
+              ? `API is waking up (${res.status}). Wait 30s and try again.`
+              : `Backend offline (${res.status}) — the Oracle API may be hung. Open /api/health; if it fails, run oracle-recover.sh on the VM, then request a fresh code.`
             : res.status === 429
               ? "Circle is rate-limiting logins. Wait 10–15 minutes, request a new code, then verify once."
               : `${res.status} ${path}`;
@@ -595,6 +597,8 @@ export async function circleLoginVerify(
     body: JSON.stringify({ requestId, otp, testnet: true, email, otpPrefix }),
   };
 
+  opts?.onProgress?.("Connecting to server…");
+  await tryWakeApiForLogin(IS_LOCAL_API ? 10_000 : 90_000);
   opts?.onProgress?.("Verifying code…");
   try {
     const body = await request<{
@@ -604,7 +608,7 @@ export async function circleLoginVerify(
       wallets?: CircleAgentWallet[];
       executorAddress?: string | null;
       needsNewCode?: boolean;
-    }>("/api/circle/login/verify", init, timeout, 1);
+    }>("/api/circle/login/verify", init, timeout, IS_LOCAL_API ? 2 : 5);
     return {
       ok: true as const,
       email: body.email,

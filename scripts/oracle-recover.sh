@@ -98,6 +98,11 @@ for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
     fi
     echo ""
     echo "Public check: https://getbutler.xyz/api/health"
+    if ! crontab -l 2>/dev/null | grep -q oracle-watchdog; then
+      echo ""
+      echo "Tip: install auto-restart (run once):"
+      echo "  (crontab -l 2>/dev/null; echo \"*/2 * * * * $ROOT/scripts/oracle-watchdog.sh >> /tmp/butler-watchdog.log 2>&1\") | crontab -"
+    fi
     exit 0
   fi
   sleep 2
