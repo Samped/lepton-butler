@@ -141,6 +141,9 @@ async function settleWinningBid(opts: {
     job,
     forceX402: opts.forceX402,
     initiator: "user",
+    statePath: opts.statePath,
+    policyStatePath: opts.statePath,
+    sellerAddress: opts.sellerAddress,
   });
   const finalized = finalizeCompletedJob(job, result);
   const completed = finalized.status === "completed";

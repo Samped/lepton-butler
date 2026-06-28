@@ -104,7 +104,7 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
       return;
     }
     try {
-      const result = await runButler({
+      const run = runButler({
         brief,
         apiBase: resolvePaymentApiBase(),
         statePath: STATE_PATH,
@@ -119,6 +119,10 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
           req.body?.auctionMode === "etf" ? "etf" : req.body?.auctionMode === "single" ? "single" : undefined,
         forceX402: !!req.body?.forceX402,
       });
+      const timeout = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Butler run timed out after 4 minutes")), 240_000);
+      });
+      const result = await Promise.race([run, timeout]);
       if (!result?.ok) {
         const unavailable =
           result?.error?.includes("Payer not configured") || result?.error?.includes("Circle");

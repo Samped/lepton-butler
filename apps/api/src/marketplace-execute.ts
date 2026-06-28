@@ -198,6 +198,154 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
   },
 };
 
+export type LocalAgentExecuteOpts = {
+  statePath: string;
+  policyStatePath: string;
+  sellerAddress: string;
+};
+
+export function parseInternalAgentExecuteUrl(url: string): { agentId: string; query: Record<string, string> } | null {
+  try {
+    const u = new URL(url);
+    const match = u.pathname.match(/^\/marketplace\/agents\/([a-z0-9-]+)\/execute$/);
+    if (!match?.[1]) return null;
+    const query: Record<string, string> = {};
+    u.searchParams.forEach((v, k) => {
+      query[k] = v;
+    });
+    return { agentId: match[1], query };
+  } catch {
+    return null;
+  }
+}
+
+export function isInternalAgentPayUrl(url: string): boolean {
+  if (process.env.BUTLER_INTERNAL_AGENT_PAY === "false") return false;
+  try {
+    const u = new URL(url);
+    if (!/\/marketplace\/agents\/[a-z0-9-]+\/execute$/.test(u.pathname)) return false;
+    return (
+      u.hostname === "127.0.0.1" ||
+      u.hostname === "localhost" ||
+      u.hostname === "::1" ||
+      u.hostname === "0.0.0.0"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function mockPaidRequest(query: Record<string, string>, payer?: string): PaidRequest {
+  return { query } as PaidRequest & { payment?: { payer: string } };
+}
+
+/** Run built-in agent in-process — avoids Circle CLI subprocess + HTTP deadlock on small VMs. */
+export async function executeLocalAgentPay(
+  url: string,
+  opts: LocalAgentExecuteOpts
+): Promise<{ ok: boolean; status: number; body?: unknown; error?: string }> {
+  const parsed = parseInternalAgentExecuteUrl(url);
+  if (!parsed) return { ok: false, status: 400, error: "Not an internal agent URL" };
+
+  const svc = AGENT_SERVICES[parsed.agentId];
+  if (!svc) return { ok: false, status: 404, error: `Unknown agent: ${parsed.agentId}` };
+
+  const { statePath, policyStatePath, sellerAddress } = opts;
+  const amountUsdc = svc.price.replace("$", "");
+
+  function loadMp() {
+    return loadMarketplaceState(statePath, sellerAddress);
+  }
+
+  function saveMp(state: ReturnType<typeof loadMp>) {
+    const latest = loadMp();
+    const next = {
+      ...latest,
+      agentStats: { ...latest.agentStats, ...state.agentStats },
+      treasury: { ...latest.treasury, ...state.treasury },
+      jobs: mergeJobUpdates(latest.jobs, state.jobs),
+      auctions: mergeAuctionUpdates(latest.auctions, state.auctions),
+    };
+    saveMarketplaceState(next, statePath);
+    return next;
+  }
+
+  const policyState = loadState(policyStatePath);
+  const decision = evaluateSpend(
+    policyState.policy,
+    { agent: svc.policyAgent, merchantId: svc.merchantId, amountUsdc, category: svc.category },
+    policyState.records
+  );
+
+  const req = mockPaidRequest(parsed.query);
+  const initiator = spendInitiatorFromMarketplaceQuery(parsed.query as Record<string, unknown>);
+  const payer = enrichSpendPayer(undefined);
+
+  if (!decision.allowed) {
+    const record: SpendRecord = {
+      id: crypto.randomUUID(),
+      at: Math.floor(Date.now() / 1000),
+      agent: svc.policyAgent,
+      category: svc.category,
+      merchantId: svc.merchantId,
+      amountUsdc,
+      payerAddress: payer.payerAddress,
+      executorAddress: payer.executorAddress,
+      initiator,
+      status: "blocked",
+      reason: decision.reason,
+    };
+    saveState(appendRecord(policyState, record), policyStatePath);
+    let mp = loadMp();
+    mp = recordAgentFailure(mp, parsed.agentId);
+    saveMp(mp);
+    return { ok: false, status: 403, error: decision.reason };
+  }
+
+  let data: unknown;
+  try {
+    data = await svc.payload(req);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Agent service failed";
+    return { ok: false, status: 503, error: message };
+  }
+
+  const settlementId = `internal-${crypto.randomUUID()}`;
+  const record: SpendRecord = {
+    id: crypto.randomUUID(),
+    at: Math.floor(Date.now() / 1000),
+    agent: svc.policyAgent,
+    category: svc.category,
+    merchantId: svc.merchantId,
+    amountUsdc,
+    settlementId,
+    payerAddress: payer.payerAddress,
+    executorAddress: payer.executorAddress,
+    initiator,
+    status: "settled",
+  };
+  saveState(appendRecord(policyState, record), policyStatePath);
+
+  let mp = loadMp();
+  mp = recordAgentSuccess(mp, parsed.agentId, amountUsdc, svc.etaSeconds);
+  mp = treasuryCredit(mp, amountUsdc);
+  saveMp(mp);
+
+  return {
+    ok: true,
+    status: 200,
+    body: {
+      agentId: parsed.agentId,
+      marketplace: true,
+      paid_by: payer.payerAddress ?? payer.executorAddress,
+      amount_usdc: amountUsdc,
+      settlementId,
+      mode: "internal",
+      data,
+    },
+  };
+}
+
 export function registerAgentExecuteRoutes(
   app: Express,
   gateway: Gateway,

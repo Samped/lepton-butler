@@ -17,6 +17,7 @@ import { appendServiceUrlParams } from "./x402-probe.ts";
 import { combineWorkflowResult } from "./deliverable-combine.ts";
 import { stashWorkflowContext } from "./context-store.ts";
 import { GatewayClient } from "@circle-fin/x402-batching/client";
+import { executeLocalAgentPay, isInternalAgentPayUrl, type LocalAgentExecuteOpts } from "./marketplace-execute.ts";
 
 function snippetFromStepBody(body: unknown): string {
   if (!body || typeof body !== "object") return "";
@@ -57,9 +58,17 @@ export interface OrchestratorResult {
 
 async function payAndFetch(
   payUrl: string,
-  options: { dryRun?: boolean; forceX402?: boolean }
+  options: {
+    dryRun?: boolean;
+    forceX402?: boolean;
+    internalPay?: LocalAgentExecuteOpts;
+  }
 ): Promise<{ ok: boolean; status: number; body?: unknown; error?: string }> {
   try {
+    if (!options.forceX402 && options.internalPay && isInternalAgentPayUrl(payUrl)) {
+      return executeLocalAgentPay(payUrl, options.internalPay);
+    }
+
   const url = payUrl;
   if (options.dryRun) {
     return { ok: false, status: 400, error: "dryRun is disabled — all workflows execute real x402 payments" };
@@ -146,6 +155,7 @@ async function runOneStep(params: {
   dryRun?: boolean;
   forceX402?: boolean;
   initiator?: SpendInitiator;
+  internalPay?: LocalAgentExecuteOpts;
 }): Promise<{ result: OrchestratorStepResult; micro: bigint; output?: unknown; snippet: string }> {
   const agent = getMarketplaceAgent(params.step.agentId);
   const policyErr = assertAgentPayable(agent);
@@ -173,12 +183,14 @@ async function runOneStep(params: {
   let finalRes = await payAndFetch(payUrl, {
     dryRun: params.dryRun,
     forceX402: params.forceX402,
+    internalPay: params.internalPay,
   });
   for (let attempt = 0; attempt < 1 && !finalRes?.ok && /timeout|aborted|rejected|endpoint/i.test(finalRes?.error ?? ""); attempt++) {
     await new Promise((r) => setTimeout(r, 1_500));
     finalRes = await payAndFetch(payUrl, {
       dryRun: params.dryRun,
       forceX402: params.forceX402,
+      internalPay: params.internalPay,
     });
   }
 
@@ -213,7 +225,18 @@ export async function runMarketplaceWorkflow(params: {
   dryRun?: boolean;
   forceX402?: boolean;
   initiator?: SpendInitiator;
+  statePath?: string;
+  policyStatePath?: string;
+  sellerAddress?: string;
 }): Promise<OrchestratorResult> {
+  const internalPay: LocalAgentExecuteOpts | undefined =
+    params.statePath && params.policyStatePath && params.sellerAddress
+      ? {
+          statePath: params.statePath,
+          policyStatePath: params.policyStatePath,
+          sellerAddress: params.sellerAddress,
+        }
+      : undefined;
   const steps: OrchestratorStepResult[] = [];
   let totalMicro = 0n;
   const outputs: unknown[] = [];
@@ -235,6 +258,7 @@ export async function runMarketplaceWorkflow(params: {
             dryRun: params.dryRun,
             forceX402: params.forceX402,
             initiator: params.initiator,
+            internalPay,
           })
         )
       );
@@ -262,6 +286,7 @@ export async function runMarketplaceWorkflow(params: {
       dryRun: params.dryRun,
       forceX402: params.forceX402,
       initiator: params.initiator,
+      internalPay,
     });
     totalMicro += row.micro;
     steps.push(row.result);
@@ -297,7 +322,7 @@ export async function runMarketplaceWorkflow(params: {
     jobId: params.job.id,
     steps,
     totalUsdc,
-    mode: circleCliLoggedIn() ? "circle-cli" : "x402",
+    mode: internalPay ? "x402" : circleCliLoggedIn() ? "circle-cli" : "x402",
     result,
   };
 }

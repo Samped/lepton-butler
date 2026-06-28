@@ -79,6 +79,9 @@ async function resumeAwardedWorkflow(
       job,
       forceX402: opts.forceX402,
       initiator: (auction.butlerOwned ?? auction.payerAgentOwned) ? "user" : "system",
+      statePath: opts.statePath,
+      policyStatePath: opts.statePath,
+      sellerAddress: opts.sellerAddress,
     });
     const finalized = finalizeCompletedJob(job, result);
     const completed = finalized.status === "completed";
@@ -234,6 +237,9 @@ export async function executeAuctionAward(opts: {
       job,
       forceX402: opts.forceX402,
       initiator: (auction.butlerOwned ?? auction.payerAgentOwned) ? "user" : "system",
+      statePath: opts.statePath,
+      policyStatePath: opts.statePath,
+      sellerAddress: opts.sellerAddress,
     });
 
     const finalized = finalizeCompletedJob(job, result);

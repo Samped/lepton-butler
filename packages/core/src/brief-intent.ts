@@ -10,7 +10,7 @@ export interface ExpressBrief {
 export function wantsDeepBrief(brief: string): boolean {
   const t = brief.toLowerCase();
   return (
-    /research paper|deep dive|full report|investment thesis|comprehensive|due diligence|multi.?agent|all agents|in-depth analysis|thorough analysis/.test(
+    /research paper|deep dive|full report|investment report|investment thesis|comprehensive|due diligence|multi.?agent|all agents|in-depth analysis|thorough analysis/.test(
       t
     ) && !isLightLiteratureBrief(brief)
   );

@@ -169,7 +169,15 @@ export function registerMarketplaceRoutes(
       return;
     }
     try {
-      const result = await runMarketplaceWorkflow({ apiBase, job, forceX402, initiator: "user" });
+      const result = await runMarketplaceWorkflow({
+        apiBase,
+        job,
+        forceX402,
+        initiator: "user",
+        statePath,
+        policyStatePath,
+        sellerAddress,
+      });
       let next = loadMp();
       const updated = finalizeCompletedJob(job, result);
       next = {
@@ -222,6 +230,9 @@ export function registerMarketplaceRoutes(
         job,
         forceX402: !!req.body?.forceX402,
         initiator: "user",
+        statePath,
+        policyStatePath,
+        sellerAddress,
       });
       mp = loadMp();
       const updated = finalizeCompletedJob(

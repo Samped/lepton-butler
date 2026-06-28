@@ -4,8 +4,10 @@
   "version": "0.1.0",
   "description": "Lepton Butler — autonomous paying agent on Arc with policy-enforced budgets",
   "workspaces": [
-    "packages/*",
-    "apps/*"
+    "packages/arc",
+    "packages/core",
+    "packages/delegation",
+    "apps/api"
   ],
   "scripts": {
     "postinstall": "node -e \"console.log('Butler ready. For API/agent: npm run install:full')\"",
