@@ -58,6 +58,11 @@ app.use(userSessionMiddleware);
 /** Login routes — never blocked by heavy route imports. */
 registerCircleLoginRoutes(app);
 
+/** Boot-time probe — static path, no async route bundle (diagnostics). */
+app.get("/api/marketplace/agents/research-agent/execute-probe", (_req, res) => {
+  res.status(402).json({ probe: true, source: "server-boot" });
+});
+
 app.get("/", (_req, res) => {
   res.type("html").send(`<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -80,7 +85,8 @@ app.use((req, res, next) => {
   if (
     req.path === "/api/health" ||
     req.path === "/" ||
-    req.path.startsWith("/api/circle/login")
+    req.path.startsWith("/api/circle/login") ||
+    req.path === "/api/marketplace/agents/research-agent/execute-probe"
   ) {
     return next();
   }

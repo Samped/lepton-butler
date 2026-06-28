@@ -496,29 +496,38 @@ export function registerAgentExecuteRoutes(
   const useLiteGate = process.env.BUTLER_LITE_API === "true" || !gateway;
 
   if (useLiteGate) {
-    const handleLiteExecute = (req: PaidRequest, res: Response): void => {
-      const agentId = String(req.params.agentId ?? "");
-      const svc = AGENT_SERVICES[agentId];
-      if (!svc) {
-        res.status(404).json({ error: "Unknown agent", agentId });
-        return;
-      }
-      if (!req.payment?.verified) {
-        res.status(402).json({
-          error: "payment_required",
-          price: svc.price,
-          amount_usdc: svc.price.replace("$", ""),
-          x402: true,
-          seller: sellerAddress,
-          mode: "lite",
-          agentId,
-        });
-        return;
-      }
-      void marketplacePaidHandler(agentId, svc)(req, res);
-    };
-    app.get("/api/marketplace/agents/:agentId/execute", handleLiteExecute);
-    app.get("/marketplace/agents/:agentId/execute", handleLiteExecute);
+    for (const [agentId, svc] of Object.entries(AGENT_SERVICES)) {
+      app.get(`/api/marketplace/agents/${agentId}/execute`, (req: PaidRequest, res: Response) => {
+        if (!req.payment?.verified) {
+          res.status(402).json({
+            error: "payment_required",
+            price: svc.price,
+            amount_usdc: svc.price.replace("$", ""),
+            x402: true,
+            seller: sellerAddress,
+            mode: "lite",
+            agentId,
+          });
+          return;
+        }
+        void marketplacePaidHandler(agentId, svc)(req, res);
+      });
+      app.get(`/marketplace/agents/${agentId}/execute`, (req: PaidRequest, res: Response) => {
+        if (!req.payment?.verified) {
+          res.status(402).json({
+            error: "payment_required",
+            price: svc.price,
+            amount_usdc: svc.price.replace("$", ""),
+            x402: true,
+            seller: sellerAddress,
+            mode: "lite",
+            agentId,
+          });
+          return;
+        }
+        void marketplacePaidHandler(agentId, svc)(req, res);
+      });
+    }
   } else {
     for (const [agentId, svc] of Object.entries(AGENT_SERVICES)) {
       const handlers = [gatewayRequireWithTimeout(gateway!, svc.price), marketplacePaidHandler(agentId, svc)];

@@ -43,9 +43,11 @@ npm run install:render
 
 UNIT_SRC="$ROOT/scripts/butler-api.service"
 UNIT_DST="/etc/systemd/system/butler-api.service"
-if [[ -f "$UNIT_SRC" ]] && [[ ! -f "$UNIT_DST" || "$UNIT_SRC" -nt "$UNIT_DST" ]]; then
-  echo "Installing systemd unit…"
-  sudo cp "$UNIT_SRC" "$UNIT_DST"
+AGENT_HOME="$(cd "$ROOT" && pwd)"
+AGENT_USER="$(whoami)"
+if [[ -f "$UNIT_SRC" ]]; then
+  echo "Installing systemd unit for $AGENT_HOME (user $AGENT_USER)…"
+  sed "s|/home/ubuntu/agent|${AGENT_HOME}|g; s|User=ubuntu|User=${AGENT_USER}|g" "$UNIT_SRC" | sudo tee "$UNIT_DST" >/dev/null
   sudo systemctl daemon-reload
   sudo systemctl enable butler-api 2>/dev/null || true
 fi
@@ -77,6 +79,12 @@ for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
     ping=$(curl -sf --max-time 3 http://127.0.0.1:3001/api/marketplace/agents/ping 2>/dev/null || echo "")
     if echo "$ping" | grep -q '"agents":15'; then
       echo "OK — agent ping route live"
+    fi
+    probe=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:3001/api/marketplace/agents/research-agent/execute-probe || echo "000")
+    if [[ "$probe" == "402" ]]; then
+      echo "OK — boot execute-probe responds (HTTP 402)"
+    else
+      echo "WARN — execute-probe HTTP $probe (wrong server binary?)"
     fi
     code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 http://127.0.0.1:3001/api/marketplace/agents/research-agent/execute || echo "000")
     if [[ "$code" == "402" ]]; then
