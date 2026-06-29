@@ -6,8 +6,12 @@ echo "=== Butler API recovery ==="
 
 # Open firewall (Oracle iptables often blocks 3001 after reboot)
 if command -v iptables >/dev/null 2>&1; then
-  sudo iptables -I INPUT -p tcp --dport 3001 -j ACCEPT 2>/dev/null || true
-  sudo iptables -I INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
+  if ! sudo iptables -C INPUT -p tcp --dport 3001 -j ACCEPT 2>/dev/null; then
+    sudo iptables -I INPUT -p tcp --dport 3001 -j ACCEPT 2>/dev/null || true
+  fi
+  if ! sudo iptables -C INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null; then
+    sudo iptables -I INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
+  fi
 fi
 
 ROOT="${BUTLER_ROOT:-$HOME/agent}"
@@ -15,6 +19,15 @@ if [[ ! -d "$ROOT" ]]; then
   ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 fi
 cd "$ROOT"
+
+echo "Stopping API and clearing orphan Node/Circle processes…"
+if systemctl is-active --quiet butler-api 2>/dev/null; then
+  sudo systemctl stop butler-api 2>/dev/null || true
+fi
+sleep 1
+sudo pkill -9 -f "${ROOT}/apps/api/dist/server.mjs" 2>/dev/null || true
+sudo pkill -9 -f "${ROOT}/scripts/circle.sh" 2>/dev/null || true
+sudo pkill -9 -f "${ROOT}/.vendor/circle-cli" 2>/dev/null || true
 
 # Hung Node still binds :3001 but never sends HTTP — kill before restart
 if command -v fuser >/dev/null 2>&1; then
@@ -36,7 +49,7 @@ if [[ -d .git ]]; then
   fi
   git fetch origin main
   git reset --hard origin/main
-  git clean -fd -e .env -e '.data/**' 2>/dev/null || true
+  git clean -fd -e .env -e '.data/**' -e '.vendor/**' -e '.circle-cli-global/**' 2>/dev/null || true
 else
   echo "WARN: $ROOT is not a git repo — skipping pull"
 fi

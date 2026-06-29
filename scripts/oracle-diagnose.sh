@@ -22,12 +22,12 @@ else
 fi
 echo ""
 
-echo "3. Public health ($PUBLIC_IP — same path Vercel uses)"
+echo "3. Public health ($PUBLIC_IP — from VM; may fail due to Oracle hairpin NAT)"
 if curl -sf --max-time 8 "http://${PUBLIC_IP}:3001/api/health"; then
   echo ""
   echo "  OK — public"
 else
-  echo "  FAIL — public (Vercel will 502 until this works)"
+  echo "  FAIL from VM (normal on Oracle) — verify in browser: https://getbutler.xyz/api/health"
 fi
 echo ""
 
@@ -40,12 +40,22 @@ fi
 echo ""
 
 echo "5. butler-api status"
-systemctl is-active butler-api 2>/dev/null || echo "  (no systemd unit)"
-sudo journalctl -u butler-api -n 15 --no-pager 2>/dev/null || true
+systemctl is-active butler-api 2>/dev/null || echo "  (not active)"
+systemctl show butler-api -p ActiveState -p SubState -p MainPID -p User -p WorkingDirectory 2>/dev/null || true
+sudo journalctl -u butler-api -n 20 --no-pager 2>/dev/null || true
 echo ""
 
-echo "Fix if public FAIL:"
-echo "  sudo iptables -I INPUT -p tcp --dport 3001 -j ACCEPT"
-echo "  rm -f $ROOT/.data/circle-login-jobs/*.json"
-echo "  sudo fuser -k 3001/tcp; sleep 2; sudo systemctl restart butler-api"
-echo "  Oracle Console → VCN → Security List → Ingress: TCP 3001 from 0.0.0.0/0"
+echo "6. Circle CLI"
+if bash "$ROOT/scripts/circle.sh" --version 2>/dev/null; then
+  echo "  OK"
+else
+  echo "  FAIL — run: cd $ROOT && npm run circle:install"
+fi
+echo ""
+
+echo "Fix if nothing on :3001:"
+echo "  cd $ROOT && npm run circle:install && npm run install:render"
+echo "  sudo pkill -9 -f dist/server.mjs; sudo fuser -k 3001/tcp; sleep 2"
+echo "  sudo systemctl restart butler-api && sleep 5"
+echo "  curl -s http://127.0.0.1:3001/api/health"
+echo "  Browser: https://getbutler.xyz/api/health"

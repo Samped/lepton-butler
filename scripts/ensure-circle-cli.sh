@@ -9,8 +9,10 @@ global_cli="$ROOT/.circle-cli-global/node_modules/@circle-fin/cli/dist/index.js"
 
 if [[ -f "$vendor_cli" ]] || [[ -f "$global_cli" ]]; then
   echo "==> Circle CLI already present"
-  bash "$ROOT/scripts/circle.sh" --version
-  exit 0
+  if bash "$ROOT/scripts/circle.sh" --version; then
+    exit 0
+  fi
+  echo "WARN: Circle CLI files exist but --version failed — reinstalling" >&2
 fi
 
 echo "==> Installing Circle CLI (vendor bundle)"
