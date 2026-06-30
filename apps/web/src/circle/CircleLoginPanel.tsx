@@ -172,6 +172,7 @@ export function CircleLoginPanel({
   const rootRef = useRef<HTMLDivElement>(null);
   const chipRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
   const otpInputRef = useRef<HTMLInputElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
   const skipResumePoll = useRef(false);
@@ -245,16 +246,22 @@ export function CircleLoginPanel({
   }, [isOpen, step]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || variant === "mobile-sheet") return;
     const onDoc = (e: MouseEvent) => {
       if (step === "otp" || verifying || sending || showFundModal) return;
       const target = e.target as Node;
-      if (rootRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
+      if (
+        rootRef.current?.contains(target) ||
+        popoverRef.current?.contains(target) ||
+        sheetRef.current?.contains(target)
+      ) {
+        return;
+      }
       setOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [isOpen, step, verifying, sending, showFundModal]);
+  }, [isOpen, step, verifying, sending, showFundModal, variant]);
 
   useEffect(() => {
     if (step !== "otp" || !isOpen) return;
@@ -714,7 +721,14 @@ export function CircleLoginPanel({
           aria-label="Close sign in"
           onClick={() => setOpen(false)}
         />
-        <div className="payer-sheet" role="dialog" aria-label="Sign in with Circle">
+        <div
+          ref={sheetRef}
+          className="payer-sheet"
+          role="dialog"
+          aria-label="Sign in with Circle"
+          onMouseDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
             className="payer-sheet-close"
