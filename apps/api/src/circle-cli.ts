@@ -389,6 +389,24 @@ let arcAvailCache: { at: number; ok: boolean } | null = null;
 let gatewayBalCache: { at: number; address: string; balance: string | null } | null = null;
 let gatewayRefreshInflight: string | null = null;
 
+function circlePayTimeoutMs(): number {
+  const configured = Number(process.env.BUTLER_CIRCLE_PAY_TIMEOUT_MS ?? "");
+  if (configured > 0) return configured;
+  return process.env.RENDER || process.env.BUTLER_LITE_API ? 300_000 : 180_000;
+}
+
+let circlePayChain: Promise<void> = Promise.resolve();
+
+/** One Circle CLI pay at a time — parallel ETF steps must not spawn competing `services pay` processes. */
+function enqueueCirclePay<T>(fn: () => Promise<T>): Promise<T> {
+  const run = circlePayChain.then(fn);
+  circlePayChain = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
+
 function runCircleAsync(args: string[], timeout = 45_000): Promise<{ ok: boolean; stdout: string; stderr: string }> {
   const effectiveTimeout =
     timeout === 45_000 && (process.env.RENDER || process.env.BUTLER_LITE_API) ? 120_000 : timeout;
@@ -810,31 +828,33 @@ export async function circleServicesPay(params: {
   chain?: string;
   estimate?: boolean;
 }): Promise<CirclePayResult> {
-  const chain = params.chain ?? resolveCircleChain();
-  const args = [
-    "services",
-    "pay",
-    params.url,
-    "--address",
-    params.address,
-    "--chain",
-    chain,
-    "--output",
-    "json",
-  ];
-  if (params.estimate) args.push("--estimate");
+  return enqueueCirclePay(async () => {
+    const chain = params.chain ?? resolveCircleChain();
+    const args = [
+      "services",
+      "pay",
+      params.url,
+      "--address",
+      params.address,
+      "--chain",
+      chain,
+      "--output",
+      "json",
+    ];
+    if (params.estimate) args.push("--estimate");
 
-    const r = await runCircleAsync(args, 180_000);
+    const r = await runCircleAsync(args, circlePayTimeoutMs());
     if (!r) {
       return { ok: false, stdout: "", stderr: "", error: "Circle CLI returned no result" };
     }
     const combined = `${r.stderr ?? ""}\n${r.stdout ?? ""}`.trim();
     return {
       ok: r.ok,
-    stdout: r.stdout ?? "",
-    stderr: r.stderr ?? "",
-    error: r.ok ? undefined : formatPaymentError(combined),
-  };
+      stdout: r.stdout ?? "",
+      stderr: r.stderr ?? "",
+      error: r.ok ? undefined : formatPaymentError(combined),
+    };
+  });
 }
 
 /** Import executor private key into Circle CLI as a local wallet. */

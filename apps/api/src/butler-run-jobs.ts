@@ -7,7 +7,7 @@ import type { ButlerResult } from "./butler.ts";
 const JOBS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../.data/butler-run-jobs");
 const JOB_TTL_MS = 2 * 60 * 60 * 1000;
 const DEFAULT_RUN_TIMEOUT_MS = 300_000;
-const ETF_RUN_TIMEOUT_MS = 600_000;
+const ETF_RUN_TIMEOUT_MS = 900_000;
 
 function runTimeoutMs(params: ButlerRunParams): number {
   if (params.auctionMode === "etf" || params.qualityTier === "full") return ETF_RUN_TIMEOUT_MS;

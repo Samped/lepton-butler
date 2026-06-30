@@ -793,7 +793,7 @@ function butlerPollDeadlineMs(body: {
   qualityTier?: QualityTier;
   auctionMode?: AuctionMode;
 }): number {
-  if (body.auctionMode === "etf" || body.qualityTier === "full") return 600_000;
+  if (body.auctionMode === "etf" || body.qualityTier === "full") return 900_000;
   return 300_000;
 }
 

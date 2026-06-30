@@ -195,8 +195,8 @@ async function runOneStep(params: {
     internalPay: params.internalPay,
     initiator: params.initiator,
   });
-  for (let attempt = 0; attempt < 1 && !finalRes?.ok && /timeout|aborted|rejected|endpoint/i.test(finalRes?.error ?? ""); attempt++) {
-    await new Promise((r) => setTimeout(r, 1_500));
+  for (let attempt = 0; attempt < 2 && !finalRes?.ok && /timeout|aborted|rejected|endpoint|circle cli timed out/i.test(finalRes?.error ?? ""); attempt++) {
+    await new Promise((r) => setTimeout(r, 2_000));
     finalRes = await payAndFetch(payUrl, {
       dryRun: params.dryRun,
       forceX402: params.forceX402,
@@ -254,11 +254,16 @@ export async function runMarketplaceWorkflow(params: {
   let priorContext = "";
 
   const { parallel, tail } = splitParallelWorkflow(params.job.steps);
-  const batches =
-    parallel.length > 0 ? [parallel, ...tail.map((s) => [s])] : params.job.steps.map((s) => [s]);
+  // Circle CLI pays are serialized globally; run ETF steps one-by-one for user tasks to avoid VM overload.
+  const serializeForCirclePay = params.initiator === "user" && !params.forceX402;
+  const batches = serializeForCirclePay
+    ? params.job.steps.map((s) => [s])
+    : parallel.length > 0
+      ? [parallel, ...tail.map((s) => [s])]
+      : params.job.steps.map((s) => [s]);
 
   for (const batch of batches) {
-    if (batch.length > 1) {
+    if (batch.length > 1 && !serializeForCirclePay) {
       const results = await Promise.all(
         batch.map((step) =>
           runOneStep({
@@ -288,27 +293,29 @@ export async function runMarketplaceWorkflow(params: {
       continue;
     }
 
-    const step = batch[0]!;
-    const row = await runOneStep({
-      apiBase: params.apiBase,
-      job: params.job,
-      step,
-      priorContext,
-      dryRun: params.dryRun,
-      forceX402: params.forceX402,
-      initiator: params.initiator,
-      internalPay,
-    });
-    totalMicro += row.micro;
-    steps.push(row.result);
-    if (!row.result.ok) break;
-    if (row.output != null) {
-      outputs.push(row.output);
-      if (row.snippet) {
-        priorContext = priorContext ? `${priorContext}\n\n---\n\n${row.snippet}` : row.snippet;
-        priorContext = priorContext.slice(0, 4_000);
+    for (const step of batch) {
+      const row = await runOneStep({
+        apiBase: params.apiBase,
+        job: params.job,
+        step,
+        priorContext: batch.length > 1 ? "" : priorContext,
+        dryRun: params.dryRun,
+        forceX402: params.forceX402,
+        initiator: params.initiator,
+        internalPay,
+      });
+      totalMicro += row.micro;
+      steps.push(row.result);
+      if (!row.result.ok) break;
+      if (row.output != null) {
+        outputs.push(row.output);
+        if (row.snippet) {
+          priorContext = priorContext ? `${priorContext}\n\n---\n\n${row.snippet}` : row.snippet;
+          priorContext = priorContext.slice(0, 4_000);
+        }
       }
     }
+    if (steps.length > 0 && steps[steps.length - 1] && !steps[steps.length - 1]!.ok) break;
   }
 
   const whole = totalMicro / 1_000_000n;

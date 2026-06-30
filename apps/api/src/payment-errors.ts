@@ -16,6 +16,9 @@ export function formatPaymentError(raw: string): string {
   if (/could not reach the endpoint|failed during initial request|domexception.*aborted|operation was aborted due to timeout/i.test(text)) {
     return "Payment endpoint timed out. Confirm the API is running (npm run dev:api) and your network can reach Circle Gateway.";
   }
+  if (/circle cli timed out/i.test(text)) {
+    return "Circle payment timed out on a workflow step. Keep the tab open and retry — multi-agent ETF runs can take several minutes on the VM.";
+  }
   if (/payment submitted but request failed/i.test(text)) {
     const server = text.match(/Server response:\s*([^\n]+)/i)?.[1]?.trim();
     if (server) {
