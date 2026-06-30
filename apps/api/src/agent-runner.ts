@@ -8,6 +8,7 @@ import {
 import { circleCliLoggedIn, circleCliRunnable, circleCliInstalled, circleServicesPay, ensureCircleExecutor, circleCliQuickRunnable } from "./circle-cli.ts";
 import { loadCircleConfig, resolveCircleExecutorAddress, useCircleCliPayments } from "./circle-config.ts";
 import { formatPaymentError } from "./payment-errors.ts";
+import { hasActiveUserSession } from "./user-session.ts";
 import { privateKeyToAccount } from "viem/accounts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -27,6 +28,13 @@ function getValidExecutorKey(): `0x${string}` | null {
 
 export function agentRunReadiness(): { canRun: boolean; reason?: string; mode?: string } {
   const pk = getValidExecutorKey();
+  if (process.env.BUTLER_LITE_API === "true" && !hasActiveUserSession() && !pk) {
+    return {
+      canRun: false,
+      mode: "circle-cli",
+      reason: "Log in with Circle (Payer chip) — each browser session pays from its own wallet.",
+    };
+  }
   const circleAddr = resolveCircleExecutorAddress();
   const circleSession = circleCliLoggedIn();
   const cfg = loadCircleConfig();

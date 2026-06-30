@@ -6,6 +6,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Express, Request, Response } from "express";
 import { sessionIdFromRequest } from "./user-session.ts";
+import { filterJobsForOwner, jobVisibleToOwner, resolveJobOwnerFromRequest } from "./job-owner.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STATE_PATH = resolve(__dirname, "../../../.data/butler-state.json");
@@ -49,12 +50,22 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
 
   app.get("/api/ledger", (req, res) => {
     const state = loadState(STATE_PATH, SELLER);
-    const scope = String(req.query.scope ?? "all");
-    const records = state.records.slice().reverse();
+    const owner = resolveJobOwnerFromRequest(req);
+    let records = state.records.slice().reverse();
+    if (owner.payerAddress) {
+      const addr = owner.payerAddress.toLowerCase();
+      records = records.filter(
+        (r) =>
+          r.payerAddress?.toLowerCase() === addr ||
+          r.executorAddress?.toLowerCase() === addr
+      );
+    } else if (owner.sessionId) {
+      records = [];
+    }
     const activityPayerAddresses = resolveActivityPayerAddresses(state.records);
     res.json({
       remainingDailyUsdc: remainingDailyUsdc(state.policy, state.records),
-      records: scope === "mine" ? records : records,
+      records,
       totalCount: records.length,
       activityPayerAddresses,
     });
@@ -100,6 +111,13 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
       res.status(400).json({ error: "brief required" });
       return;
     }
+    const sessionId = sessionIdFromRequest(req);
+    if (!sessionId) {
+      res.status(401).json({
+        error: "Missing browser session — refresh the dashboard. Each user needs an isolated session to pay and view tasks.",
+      });
+      return;
+    }
     if (!!req.body?.dryRun) {
       res.status(400).json({ error: "dryRun is disabled — Butler executes real x402 payments" });
       return;
@@ -118,7 +136,7 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
       auctionMode:
         req.body?.auctionMode === "etf" ? ("etf" as const) : req.body?.auctionMode === "single" ? ("single" as const) : undefined,
       forceX402: !!req.body?.forceX402,
-      sessionId: sessionIdFromRequest(req) ?? undefined,
+      sessionId: sessionId ?? undefined,
     };
     const { startButlerRunJob } = await import("./butler-run-jobs.ts");
     const runId = startButlerRunJob(params);
@@ -194,17 +212,21 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
   });
 
   app.get("/api/marketplace/jobs/:id", (req, res) => {
+    const owner = resolveJobOwnerFromRequest(req);
     const job = loadMp().jobs.find((j) => j.id === req.params.id);
-    if (!job) {
+    if (!job || !jobVisibleToOwner(job, owner)) {
       res.status(404).json({ error: "Job not found" });
       return;
     }
     res.json({ ...job, plan: job.plan ?? inferPlanFromJob(job), summary: buildJobSummary(job) });
   });
 
-  app.get("/api/marketplace/deliverables", (_req, res) => {
-    const jobs = loadMp()
-      .jobs.filter((j) => j.status === "completed")
+  app.get("/api/marketplace/deliverables", (req, res) => {
+    const owner = resolveJobOwnerFromRequest(req);
+    const jobs = filterJobsForOwner(
+      loadMp().jobs.filter((j) => j.status === "completed"),
+      owner
+    )
       .slice(-50)
       .reverse()
       .map((j) => ({

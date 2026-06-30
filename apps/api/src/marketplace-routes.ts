@@ -32,6 +32,7 @@ import {
   runMarketplaceWorkflow,
 } from "./marketplace-orchestrator.ts";
 import { buildJobSummary, finalizeCompletedJob, inferPlanFromJob, planToJobPlan, runMarketplaceTask } from "./marketplace-task.ts";
+import { filterJobsForOwner, jobVisibleToOwner, resolveJobOwnerFromRequest, stampJobOwner } from "./job-owner.ts";
 import { getOpenAiPlannerStatus } from "./openai-planner.ts";
 import {
   executeAuctionAward,
@@ -109,17 +110,21 @@ export function registerMarketplaceRoutes(
   });
 
   app.get("/api/marketplace/jobs/:id", (req, res) => {
+    const owner = resolveJobOwnerFromRequest(req);
     const job = loadMp().jobs.find((j) => j.id === req.params.id);
-    if (!job) {
+    if (!job || !jobVisibleToOwner(job, owner)) {
       res.status(404).json({ error: "Job not found" });
       return;
     }
     res.json({ ...job, plan: job.plan ?? inferPlanFromJob(job), summary: buildJobSummary(job) });
   });
 
-  app.get("/api/marketplace/deliverables", (_req, res) => {
-    const jobs = loadMp()
-      .jobs.filter((j) => j.status === "completed")
+  app.get("/api/marketplace/deliverables", (req, res) => {
+    const owner = resolveJobOwnerFromRequest(req);
+    const jobs = filterJobsForOwner(
+      loadMp().jobs.filter((j) => j.status === "completed"),
+      owner
+    )
       .slice(-50)
       .reverse()
       .map((j) => {
@@ -149,6 +154,8 @@ export function registerMarketplaceRoutes(
       res.status(400).json({ error: "agentId or etfId required" });
       return;
     }
+    const owner = resolveJobOwnerFromRequest(req);
+    job = stampJobOwner(job, owner);
     let mp = loadMp();
     mp = { ...mp, jobs: [...mp.jobs, job] };
     saveMp(mp);

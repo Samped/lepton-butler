@@ -14,6 +14,8 @@ import {
 } from "@butler/core";
 import { buildDirectJob, buildEtfJob, runMarketplaceWorkflow } from "./marketplace-orchestrator.ts";
 import { finalizeCompletedJob } from "./marketplace-task.ts";
+import { stampJobFromAuction } from "./job-owner.ts";
+import { runWithUserSession } from "./user-session.ts";
 
 const awardingLocks = new Set<string>();
 
@@ -63,10 +65,11 @@ async function resumeAwardedWorkflow(
   const winner = pickAuctionWinner(auction, credits);
   if (!winner) return { ok: false, error: "No winner on stalled auction" };
 
-  const job = winner.etfId
+  const built = winner.etfId
     ? buildEtfJob(winner.etfId, auction.brief)
     : buildDirectJob(winner.agentId, auction.brief);
-  if (!job) return { ok: false, error: "Failed to create job" };
+  if (!built) return { ok: false, error: "Failed to create job" };
+  const job = stampJobFromAuction(built, auction);
   job.type = winner.etfId ? "etf" : "auction";
   job.auctionId = auction.id;
   job.totalUsdc = winner.priceUsdc;
@@ -74,16 +77,20 @@ async function resumeAwardedWorkflow(
 
   awardingLocks.add(opts.auctionId);
   try {
-    const result = await runMarketplaceWorkflow({
-      apiBase: opts.apiBase,
-      job,
-      forceX402: opts.forceX402,
-      initiator: (auction.butlerOwned ?? auction.payerAgentOwned) ? "user" : "system",
-      statePath: opts.statePath,
-      policyStatePath: opts.statePath,
-      sellerAddress: opts.sellerAddress,
-    });
-    const finalized = finalizeCompletedJob(job, result);
+    const settle = async () =>
+      runMarketplaceWorkflow({
+        apiBase: opts.apiBase,
+        job,
+        forceX402: opts.forceX402,
+        initiator: (auction.butlerOwned ?? auction.payerAgentOwned) ? "user" : "system",
+        statePath: opts.statePath,
+        policyStatePath: opts.statePath,
+        sellerAddress: opts.sellerAddress,
+      });
+    const result = auction.ownerSessionId
+      ? await runWithUserSession(auction.ownerSessionId, settle)
+      : await settle();
+    const finalized = stampJobFromAuction(finalizeCompletedJob(job, result), auction);
     const completed = finalized.status === "completed";
 
     patchMarketplaceState(opts.statePath, opts.sellerAddress, (latest) => {
@@ -197,10 +204,11 @@ export async function executeAuctionAward(opts: {
       return { ok: false, error: msg };
     }
 
-    const job = winner.etfId
+    const built = winner.etfId
       ? buildEtfJob(winner.etfId, auction.brief)
       : buildDirectJob(winner.agentId, auction.brief);
-    if (!job) return { ok: false, error: "Failed to create job" };
+    if (!built) return { ok: false, error: "Failed to create job" };
+    const job = stampJobFromAuction(built, auction);
     job.type = winner.etfId ? "etf" : "auction";
     job.auctionId = auction.id;
     job.totalUsdc = winner.priceUsdc;
@@ -232,17 +240,21 @@ export async function executeAuctionAward(opts: {
       ),
     }));
 
-    const result = await runMarketplaceWorkflow({
-      apiBase: opts.apiBase,
-      job,
-      forceX402: opts.forceX402,
-      initiator: (auction.butlerOwned ?? auction.payerAgentOwned) ? "user" : "system",
-      statePath: opts.statePath,
-      policyStatePath: opts.statePath,
-      sellerAddress: opts.sellerAddress,
-    });
+    const settle = async () =>
+      runMarketplaceWorkflow({
+        apiBase: opts.apiBase,
+        job,
+        forceX402: opts.forceX402,
+        initiator: (auction.butlerOwned ?? auction.payerAgentOwned) ? "user" : "system",
+        statePath: opts.statePath,
+        policyStatePath: opts.statePath,
+        sellerAddress: opts.sellerAddress,
+      });
+    const result = auction.ownerSessionId
+      ? await runWithUserSession(auction.ownerSessionId, settle)
+      : await settle();
 
-    const finalized = finalizeCompletedJob(job, result);
+    const finalized = stampJobFromAuction(finalizeCompletedJob(job, result), auction);
     const completed = finalized.status === "completed";
 
     patchMarketplaceState(opts.statePath, opts.sellerAddress, (latest) => {

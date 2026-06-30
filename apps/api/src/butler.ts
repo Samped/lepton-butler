@@ -39,6 +39,8 @@ import {
   loadExternalAgentRegistry,
 } from "./external-agent-registry.ts";
 import { probeX402Url } from "./x402-probe.ts";
+import { resolveCircleExecutorAddress } from "./circle-config.ts";
+import { stampAuctionOwner, stampJobOwner } from "./job-owner.ts";
 
 export { inferAuctionCategory, resolveTaskCategory } from "@butler/core";
 
@@ -113,12 +115,14 @@ async function settleWinningBid(opts: {
   sellerAddress: string;
   bid: AuctionBid;
   forceX402?: boolean;
+  sessionId?: string;
   phases: ButlerPhase[];
   now: () => number;
 }): Promise<ButlerResult> {
   const { bid } = opts;
-  const job = bid.etfId ? buildEtfJob(bid.etfId, opts.brief) : buildDirectJob(bid.agentId, opts.brief);
-  if (!job) {
+  const owner = { sessionId: opts.sessionId, payerAddress: resolveCircleExecutorAddress() ?? undefined };
+  const built = bid.etfId ? buildEtfJob(bid.etfId, opts.brief) : buildDirectJob(bid.agentId, opts.brief);
+  if (!built) {
     return {
       ok: false,
       strategy: "auction",
@@ -128,6 +132,7 @@ async function settleWinningBid(opts: {
       error: "Failed to create job for settlement",
     };
   }
+  const job = stampJobOwner(built, owner);
   job.totalUsdc = bid.priceUsdc;
   if (bid.etfId) job.etfId = bid.etfId;
 
@@ -147,7 +152,7 @@ async function settleWinningBid(opts: {
     policyStatePath: opts.statePath,
     sellerAddress: opts.sellerAddress,
   });
-  const finalized = finalizeCompletedJob(job, result);
+  const finalized = stampJobOwner(finalizeCompletedJob(job, result), owner);
   const completed = finalized.status === "completed";
   const settlementId = result.steps.find((s) => s.settlementId)?.settlementId;
 
@@ -327,6 +332,7 @@ export async function runButler(opts: {
   maxBudgetUsdc?: string;
   auctionMode?: AuctionMode;
   forceX402?: boolean;
+  sessionId?: string;
 }): Promise<ButlerResult> {
   const brief = opts.brief.trim();
   if (!brief) {
@@ -363,6 +369,7 @@ export async function runButler(opts: {
   const phases: ButlerPhase[] = [];
   const now = () => Math.floor(Date.now() / 1000);
   const policy = getExternalAgentPolicy();
+  const owner = { sessionId: opts.sessionId, payerAddress: resolveCircleExecutorAddress() ?? undefined };
 
   try {
   loadExternalAgentRegistry();
@@ -443,6 +450,7 @@ export async function runButler(opts: {
         sellerAddress: opts.sellerAddress,
         bid,
         forceX402: opts.forceX402,
+        sessionId: opts.sessionId,
         phases,
         now,
       });
@@ -537,12 +545,13 @@ export async function runButler(opts: {
       sellerAddress: opts.sellerAddress,
       bid: auctionPreview.bids[0]!,
       forceX402: opts.forceX402,
+      sessionId: opts.sessionId,
       phases,
       now,
     });
   }
 
-  const auction = auctionPreview;
+  const auction = stampAuctionOwner(auctionPreview, owner);
   mp = updateMarketplaceState(opts.statePath, opts.sellerAddress, (state) => ({
     ...state,
     auctions: [...state.auctions, auction],

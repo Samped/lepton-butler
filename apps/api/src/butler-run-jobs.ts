@@ -90,7 +90,24 @@ function runWorker(runId: string, params: ButlerRunParams): void {
             timeoutMs
           );
         });
-        const result = await Promise.race([runButler(params), timeout]);
+    const result = await Promise.race([
+      runButler({
+        brief: params.brief,
+        apiBase: params.apiBase,
+        statePath: params.statePath,
+        sellerAddress: params.sellerAddress,
+        strategy: params.strategy,
+        category: params.category,
+        minReputation: params.minReputation,
+        ttlSeconds: params.ttlSeconds,
+        qualityTier: params.qualityTier as import("@butler/core").QualityTier | undefined,
+        maxBudgetUsdc: params.maxBudgetUsdc,
+        auctionMode: params.auctionMode,
+        forceX402: params.forceX402,
+        sessionId: params.sessionId,
+      }),
+      timeout,
+    ]);
         if (!result?.ok) {
           updateJob(runId, {
             status: "error",

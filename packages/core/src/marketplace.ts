@@ -93,6 +93,10 @@ export interface MarketplaceJob {
   /** Human-readable deliverable text for the dashboard library. */
   summary?: string;
   plan?: MarketplaceJobPlan;
+  /** Browser session that created this job (per-user library isolation). */
+  ownerSessionId?: string;
+  /** Circle payer wallet that funded this job. */
+  payerAddress?: string;
 }
 
 export interface MarketplaceJobStep {
@@ -138,6 +142,9 @@ export interface ReverseAuction {
   butlerOwned?: boolean;
   /** @deprecated Use butlerOwned */
   payerAgentOwned?: boolean;
+  /** Browser session that opened this auction (pays and owns the deliverable). */
+  ownerSessionId?: string;
+  payerAddress?: string;
   events?: AuctionEvent[];
 }
 
