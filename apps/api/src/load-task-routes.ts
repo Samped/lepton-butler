@@ -27,14 +27,12 @@ function resolvePaymentApiBase(): string {
 export async function loadTaskRoutes(app: Express): Promise<void> {
   const [
     { agentRunReadiness },
-    { runButler },
     { loadState, remainingDailyUsdc },
     { getExecutorWalletAddress, resolveActivityPayerAddresses },
     circleCli,
     circleConfig,
   ] = await Promise.all([
     import("./agent-runner.ts"),
-    import("./butler.ts"),
     import("@butler/core"),
     import("./ledger-payer.ts"),
     import("./circle-cli.ts"),
@@ -105,42 +103,47 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
       res.status(400).json({ error: "dryRun is disabled — Butler executes real x402 payments" });
       return;
     }
-    try {
-      const run = runButler({
-        brief,
-        apiBase: resolvePaymentApiBase(),
-        statePath: STATE_PATH,
-        sellerAddress: SELLER,
-        strategy: req.body?.strategy === "direct" ? "direct" : "auction",
-        category: req.body?.category,
-        minReputation: req.body?.minReputation != null ? Number(req.body.minReputation) : undefined,
-        ttlSeconds: req.body?.ttlSeconds != null ? Number(req.body.ttlSeconds) : undefined,
-        qualityTier: req.body?.qualityTier,
-        maxBudgetUsdc: req.body?.maxBudgetUsdc != null ? String(req.body.maxBudgetUsdc) : undefined,
-        auctionMode:
-          req.body?.auctionMode === "etf" ? "etf" : req.body?.auctionMode === "single" ? "single" : undefined,
-        forceX402: !!req.body?.forceX402,
-      });
-      const timeout = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("Butler run timed out after 4 minutes")), 240_000);
-      });
-      const result = await Promise.race([run, timeout]);
-      if (!result?.ok) {
-        const unavailable =
-          result?.error?.includes("Payer not configured") || result?.error?.includes("Circle");
-        res.status(unavailable ? 503 : 200).json(result ?? { ok: false, error: "Butler returned no result" });
-        return;
-      }
-      res.json(result);
-    } catch (e) {
-      res.status(500).json({ error: e instanceof Error ? e.message : "Butler failed" });
+    const params = {
+      brief,
+      apiBase: resolvePaymentApiBase(),
+      statePath: STATE_PATH,
+      sellerAddress: SELLER,
+      strategy: req.body?.strategy === "direct" ? ("direct" as const) : ("auction" as const),
+      category: req.body?.category,
+      minReputation: req.body?.minReputation != null ? Number(req.body.minReputation) : undefined,
+      ttlSeconds: req.body?.ttlSeconds != null ? Number(req.body.ttlSeconds) : undefined,
+      qualityTier: req.body?.qualityTier,
+      maxBudgetUsdc: req.body?.maxBudgetUsdc != null ? String(req.body.maxBudgetUsdc) : undefined,
+      auctionMode:
+        req.body?.auctionMode === "etf" ? ("etf" as const) : req.body?.auctionMode === "single" ? ("single" as const) : undefined,
+      forceX402: !!req.body?.forceX402,
+    };
+    const { startButlerRunJob } = await import("./butler-run-jobs.ts");
+    const runId = startButlerRunJob(params);
+    res.status(202).json({ pending: true, runId, brief });
+  };
+
+  const butlerRunPoll = async (req: Request, res: Response) => {
+    const { getButlerRunJob } = await import("./butler-run-jobs.ts");
+    const job = getButlerRunJob(req.params.runId);
+    if (!job) {
+      res.status(404).json({ error: "Butler run not found or expired — submit the task again." });
+      return;
     }
+    res.json({
+      status: job.status,
+      result: job.result,
+      error: job.error,
+      elapsedMs: Date.now() - job.startedAt,
+    });
   };
 
   app.get("/api/butler/readiness", butlerReadiness);
   app.post("/api/butler/run", butlerRun);
+  app.get("/api/butler/run/:runId", butlerRunPoll);
   app.get("/api/payer-agent/readiness", butlerReadiness);
   app.post("/api/payer-agent/run", butlerRun);
+  app.get("/api/payer-agent/run/:runId", butlerRunPoll);
 
   const [
     { registerRegistryRoutes },

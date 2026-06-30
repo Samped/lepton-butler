@@ -959,7 +959,7 @@ export type PayerAgentPhase = ButlerPhase;
 /** @deprecated Use ButlerQuote */
 export type PayerAgentQuote = ButlerQuote;
 
-export function runButler(body: {
+export async function runButler(body: {
   brief: string;
   category?: string;
   strategy?: "auction" | "direct";
@@ -970,16 +970,49 @@ export function runButler(body: {
   auctionMode?: AuctionMode;
   forceX402?: boolean;
 }) {
-  return request<ButlerResult>(
+  const started = await request<{ pending?: boolean; runId?: string; ok?: boolean }>(
     "/api/butler/run",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     },
-    300_000,
-    1
+    IS_LOCAL_API ? 45_000 : 30_000,
+    IS_LOCAL_API ? 2 : 5
   );
+
+  if (started.ok !== undefined && !started.pending) {
+    return started as ButlerResult;
+  }
+  if (!started.runId) {
+    throw new Error("Butler did not return a run id — retry the task.");
+  }
+
+  const deadline = Date.now() + (IS_LOCAL_API ? 300_000 : 300_000);
+  let delay = 2_000;
+  while (Date.now() < deadline) {
+    const status = await request<{
+      status: string;
+      result?: ButlerResult;
+      error?: string;
+      elapsedMs?: number;
+    }>(`/api/butler/run/${started.runId}`, undefined, IS_LOCAL_API ? 20_000 : 25_000, IS_LOCAL_API ? 3 : 8);
+
+    if (status.status === "pending" || status.status === "running") {
+      await new Promise((r) => setTimeout(r, delay));
+      delay = Math.min(delay + 500, 4_000);
+      continue;
+    }
+    if (status.status === "error") {
+      if (status.result) return status.result;
+      throw new Error(status.error ?? "Butler run failed");
+    }
+    if (status.status === "ok" && status.result) {
+      return status.result;
+    }
+    throw new Error(status.error ?? "Butler returned no result");
+  }
+  throw new Error("Butler run timed out. Check Library — the task may still finish in the background.");
 }
 
 /** @deprecated Use runButler */

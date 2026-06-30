@@ -31,8 +31,8 @@ export function formatWorkflowError(raw: string): string {
       return "Butler could not finish in time. The API may be offline or missing x402 agent routes — retry after the server restarts.";
     }
   }
-  if (/cannot reach api|backend server may be offline/i.test(text)) {
-    return "Cannot reach Butler API — the server at getbutler.xyz may be down. Retry in 30s or restart butler-api on the Oracle VM.";
+  if (/cannot reach api|backend server may be offline|backend offline/i.test(text)) {
+    return "Cannot reach Butler API while running your task. If /api/health shows \"ok\":true, wait 30s and retry — the server may be busy with payments. Otherwise run oracle-recover.sh on the VM.";
   }
   if (/signal is aborted/i.test(text)) {
     return "Request was cancelled or timed out. Keep this tab open while Butler runs (auctions can take 1–3 minutes).";

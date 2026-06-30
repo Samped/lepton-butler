@@ -7,6 +7,7 @@ import express from "express";
 import { ARC_EIP155 } from "@butler/arc";
 import { registerCircleLoginRoutes } from "./circle-login-routes.ts";
 import { resumePendingLoginJobs } from "./circle-login-jobs.ts";
+import { pruneButlerRunJobs } from "./butler-run-jobs.ts";
 import { userSessionMiddleware } from "./user-session.ts";
 import { getRouteLoaderStatus } from "./route-loader-status.ts";
 
@@ -97,6 +98,7 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`Butler API http://localhost:${PORT} (booting…)`);
   ready = true;
   resumePendingLoginJobs();
+  pruneButlerRunJobs();
   console.log(`Butler API login ready · Circle OTP`);
 
   void import("./load-core-routes.ts")
