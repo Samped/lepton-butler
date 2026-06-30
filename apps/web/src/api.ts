@@ -60,6 +60,7 @@ export interface AgentStatus {
   useCircleCli?: boolean;
   paymentMode?: string;
   gatewayBalanceUsdc?: string | null;
+  openAiPlanner?: { enabled: boolean; model: string };
 }
 
 export interface CircleStatus {

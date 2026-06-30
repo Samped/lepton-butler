@@ -24,6 +24,7 @@ import {
   type MarketplaceCategory,
   type QualityTier,
   type ReverseAuction,
+  type TaskPlan,
   mergeJobUpdates,
   patchMarketplaceState,
   recordAgentSuccess,
@@ -31,7 +32,8 @@ import {
 } from "@butler/core";
 import { agentRunReadiness } from "./agent-runner.ts";
 import { executeAuctionAward } from "./auction-engine.ts";
-import { planTaskForRun, runMarketplaceTask, buildJobSummary, finalizeCompletedJob } from "./marketplace-task.ts";
+import { planTaskForRun, runMarketplaceTask, buildJobSummary, finalizeCompletedJob, jobFromPlan, planToJobPlan } from "./marketplace-task.ts";
+import { getOpenAiPlannerStatus } from "./openai-planner.ts";
 import { buildDirectJob, buildEtfJob, runMarketplaceWorkflow } from "./marketplace-orchestrator.ts";
 import {
   discoverOpenAgents,
@@ -186,6 +188,116 @@ async function settleWinningBid(opts: {
     summary: finalized.summary ?? buildJobSummary(finalized),
     error: completed ? undefined : opts.phases[opts.phases.length - 1]?.error,
   };
+}
+
+function planWinnerLabel(plan: TaskPlan): { agentId: string; agentName: string; priceUsdc: string } | undefined {
+  if (plan.strategy === "etf" && plan.etfId) {
+    const etf = getMarketplaceEtf(plan.etfId);
+    const leadId = plan.agentIds[0] ?? etf?.agentIds[0];
+    return {
+      agentId: leadId ?? plan.etfId,
+      agentName: etf?.name ?? plan.etfId,
+      priceUsdc: plan.estimatedUsdc,
+    };
+  }
+  const leadId = plan.agentIds[0];
+  if (!leadId) return undefined;
+  const agent = listMarketplaceAgents().find((a) => a.id === leadId);
+  const name =
+    plan.strategy === "workflow" && plan.agentIds.length > 1
+      ? `${agent?.name ?? leadId} + ${plan.agentIds.length - 1} more`
+      : (agent?.name ?? leadId);
+  return { agentId: leadId, agentName: name, priceUsdc: plan.estimatedUsdc };
+}
+
+/** Execute a TaskPlan (OpenAI or heuristic) without running a full auction. */
+async function settleFromTaskPlan(opts: {
+  plan: TaskPlan;
+  brief: string;
+  category: MarketplaceCategory;
+  apiBase: string;
+  statePath: string;
+  sellerAddress: string;
+  forceX402?: boolean;
+  sessionId?: string;
+  phases: ButlerPhase[];
+  now: () => number;
+}): Promise<ButlerResult> {
+  const built = jobFromPlan(opts.plan, opts.brief);
+  if (!built) {
+    return {
+      ok: false,
+      strategy: "auction",
+      brief: opts.brief,
+      category: opts.category,
+      phases: opts.phases,
+      error: "Could not build job from task plan",
+    };
+  }
+
+  const owner = { sessionId: opts.sessionId, payerAddress: resolveCircleExecutorAddress() ?? undefined };
+  const job = stampJobOwner({ ...built, plan: planToJobPlan(opts.plan) }, owner);
+  job.totalUsdc = opts.plan.estimatedUsdc;
+  if (opts.plan.etfId) job.etfId = opts.plan.etfId;
+
+  const winner = planWinnerLabel(opts.plan);
+  const routeLabel = opts.plan.router === "planner" ? "OpenAI planner" : "Task router";
+  opts.phases.push({
+    phase: "negotiate",
+    at: opts.now(),
+    message: `${routeLabel} — ${opts.plan.reason}`,
+    winner,
+  });
+
+  const result = await runMarketplaceWorkflow({
+    apiBase: opts.apiBase,
+    job,
+    forceX402: opts.forceX402,
+    initiator: "user",
+    statePath: opts.statePath,
+    policyStatePath: opts.statePath,
+    sellerAddress: opts.sellerAddress,
+  });
+
+  const finalized = stampJobOwner(finalizeCompletedJob(job, result), owner);
+  const completed = finalized.status === "completed";
+  const settlementId = result.steps.find((s) => s.settlementId)?.settlementId;
+
+  patchMarketplaceState(opts.statePath, opts.sellerAddress, (state) => {
+    let next = { ...state, jobs: mergeJobUpdates(state.jobs, [finalized]) };
+    const paidAgentId = opts.plan.agentIds[0];
+    if (completed && paidAgentId) {
+      next = recordAgentSuccess(next, paidAgentId, opts.plan.estimatedUsdc, opts.plan.etaSeconds);
+      next = treasuryCredit(next, opts.plan.estimatedUsdc);
+    }
+    return next;
+  });
+
+  opts.phases.push({
+    phase: "settle",
+    at: opts.now(),
+    message: completed ? "x402 payment settled — deliverable received" : (result.steps.find((s) => !s.ok)?.error ?? "Settlement failed"),
+    settlementId,
+    ok: completed,
+    winner,
+    error: completed ? undefined : result.steps.find((s) => !s.ok)?.error,
+  });
+
+  return {
+    ok: completed,
+    strategy: "auction",
+    mode: result.mode,
+    brief: opts.brief,
+    category: opts.category,
+    phases: opts.phases,
+    jobId: finalized.id,
+    summary: finalized.summary ?? buildJobSummary(finalized),
+    error: completed ? undefined : opts.phases[opts.phases.length - 1]?.error,
+  };
+}
+
+function aiPlannerEnabled(): boolean {
+  return process.env.BUTLER_AI_PLANNER !== "false" && getOpenAiPlannerStatus().enabled;
 }
 
 function discoverQuotes(
@@ -420,6 +532,31 @@ export async function runButler(opts: {
         : `Catalog: ${quotes.length} agents eligible for ${category} (${listMarketplaceAgents().filter((a) => a.origin === "external").length} external)`,
     quotes,
   });
+
+  if (strategy === "auction" && aiPlannerEnabled()) {
+    const plan = await planTaskForRun({
+      task: brief,
+      mode: "auto",
+      credits,
+      qualityTier,
+      auctionMode,
+      category,
+    });
+    if (plan.router === "planner") {
+      return settleFromTaskPlan({
+        plan,
+        brief,
+        category,
+        apiBase: opts.apiBase,
+        statePath: opts.statePath,
+        sellerAddress: opts.sellerAddress,
+        forceX402: opts.forceX402,
+        sessionId: opts.sessionId,
+        phases,
+        now,
+      });
+    }
+  }
 
   if (strategy === "auction" && btcRoute?.etfId && !express) {
     const etf = getMarketplaceEtf(btcRoute.etfId);

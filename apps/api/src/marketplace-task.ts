@@ -19,12 +19,19 @@ export async function planTaskForRun(params: {
   agentIds?: string[];
   etfId?: string | null;
   credits?: AgentCreditScore[];
+  qualityTier?: string;
+  auctionMode?: string;
+  category?: string;
 }): Promise<TaskPlan> {
   if (params.mode === "manual") {
     return planTaskExecution(params);
   }
 
-  const aiPlan = await planTaskWithOpenAi(params.task, params.credits ?? []);
+  const aiPlan = await planTaskWithOpenAi(params.task, params.credits ?? [], {
+    qualityTier: params.qualityTier,
+    auctionMode: params.auctionMode,
+    category: params.category,
+  });
   if (aiPlan) return aiPlan;
 
   return { ...planTaskExecution(params), router: "heuristic" };

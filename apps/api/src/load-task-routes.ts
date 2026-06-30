@@ -10,6 +10,7 @@ import { filterJobsForOwner, jobVisibleToOwner, resolveJobOwnerFromRequest } fro
 import { handleGetLedger } from "./ledger-handlers.ts";
 import { registerAuctionRoutes } from "./auction-routes.ts";
 import { registerTraceRoutes } from "./trace-routes.ts";
+import { getOpenAiPlannerStatus } from "./openai-planner.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STATE_PATH = resolve(__dirname, "../../../.data/butler-state.json");
@@ -81,6 +82,7 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
         canRun: readiness.canRun,
         paymentMode: readiness.mode,
         gatewayBalanceUsdc,
+        openAiPlanner: getOpenAiPlannerStatus(),
         ...(readiness.reason ? { reason: readiness.reason } : {}),
       });
     } catch (error) {

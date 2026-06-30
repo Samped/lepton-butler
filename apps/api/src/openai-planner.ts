@@ -58,6 +58,8 @@ Rules:
 - ETF picks: btc-full-thesis-etf for comprehensive BTC investment theses (~1 min, single thesis agent); btc-onchain-etf for lighter BTC on-chain; defi-alpha-etf for DeFi; macro-radar-etf for macro; bill-audit-bundle for bills/subscriptions.
 - Prefer btc-full-thesis-etf when the user asks for bull/base/bear scenarios, whale flows, DeFi exposure, and executive report on BTC.
 - For comprehensive investment reports on a stock/company, prefer an ETF that includes research-agent + report-agent.
+- When quality tier is "full" or auction mode is "etf", prefer a bundled ETF workflow over a single agent unless the task is narrowly scoped (headlines only, price only, etc.).
+- When quality tier is "brief", prefer a single fast specialist agent (direct) over multi-agent ETFs.
 - Only use agent and ETF ids from the catalog. Never invent ids.
 - Optimize for task fit, then reputation, then total cost.
 
@@ -90,13 +92,24 @@ function parseLlmJson(content: string): LlmRouteResponse | null {
 
 export async function planTaskWithOpenAi(
   task: string,
-  credits: AgentCreditScore[] = []
+  credits: AgentCreditScore[] = [],
+  context?: { qualityTier?: string; auctionMode?: string; category?: string }
 ): Promise<TaskPlan | null> {
   const key = process.env.OPENAI_API_KEY?.trim();
   if (!key) return null;
 
   const model = process.env.OPENAI_MODEL?.trim() || DEFAULT_MODEL;
   const timeoutMs = Number(process.env.OPENAI_TIMEOUT_MS ?? 25_000);
+
+  const contextLines = [
+    context?.qualityTier ? `User quality tier: ${context.qualityTier}` : null,
+    context?.auctionMode ? `User auction mode: ${context.auctionMode}` : null,
+    context?.category ? `User category hint: ${context.category}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const userContent = contextLines ? `${contextLines}\n\nTask:\n${task}` : task;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -114,7 +127,7 @@ export async function planTaskWithOpenAi(
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: `${SYSTEM_PROMPT}\n\nCatalog:\n${catalogForPrompt(credits)}` },
-          { role: "user", content: task },
+          { role: "user", content: userContent },
         ],
       }),
       signal: controller.signal,
