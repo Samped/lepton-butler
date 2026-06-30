@@ -626,6 +626,20 @@ export async function circleLoginVerify(
         "Verify timed out. Check /api/health, then tap Verify once more with the same code (codes expire quickly)."
       );
     }
+    if (/502|503|504|Backend offline/i.test(lastErr.message)) {
+      try {
+        const h = await getHealthQuick();
+        if (h.ok) {
+          throw new Error(
+            "Verify hit a temporary 502 while the API is online. Tap Resend for a fresh code, then Verify again."
+          );
+        }
+      } catch (recheck) {
+        if (recheck instanceof Error && !/502|503|504|Backend offline/i.test(recheck.message)) {
+          throw recheck;
+        }
+      }
+    }
     throw lastErr;
   }
 }
