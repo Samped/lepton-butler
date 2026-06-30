@@ -40,6 +40,7 @@ import {
   IconWallet,
 } from "./icons.tsx";
 import { PaymentTrace } from "./trace/PaymentTrace.tsx";
+import { ActivityDetail } from "./activity/ActivityDetail.tsx";
 import { StackStatusPanel } from "./trace/StackStatus.tsx";
 import { MarketplaceView } from "./marketplace/MarketplaceView.tsx";
 import { AgentChatView } from "./agent/AgentChatView.tsx";
@@ -93,6 +94,7 @@ export function App() {
   const [ledgerTotalCount, setLedgerTotalCount] = useState(0);
   const [activityPayerAddresses, setActivityPayerAddresses] = useState<string[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [selectedActivity, setSelectedActivity] = useState<SpendRecord | null>(null);
   const [butlerBusy, setButlerBusy] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileLoginOpen, setMobileLoginOpen] = useState(false);
@@ -215,6 +217,10 @@ export function App() {
     const id = setInterval(() => void refresh({ quiet: true }), 15_000);
     return () => clearInterval(id);
   }, [refresh, loading]);
+
+  useEffect(() => {
+    if (tab !== "activity") setSelectedActivity(null);
+  }, [tab]);
 
   useEffect(() => {
     if (tab !== "activity") return;
@@ -817,7 +823,20 @@ export function App() {
                     </thead>
                     <tbody>
                       {activityRecords.map((r) => (
-                        <tr key={r.id} className={r.status === "blocked" ? "dim" : ""}>
+                        <tr
+                          key={r.id}
+                          className={`ledger-row ${r.status === "blocked" ? "dim" : ""} ${selectedActivity?.id === r.id ? "selected" : ""}`}
+                          onClick={() => setSelectedActivity(r)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setSelectedActivity(r);
+                            }
+                          }}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`View payment ${merchantLabel(r.merchantId)} ${formatUsdc(r.amountUsdc)} USDC`}
+                        >
                           <td>{new Date(r.at * 1000).toLocaleString()}</td>
                           <td className="capitalize">{r.agent}</td>
                           <td>{merchantLabel(r.merchantId)}</td>
@@ -826,20 +845,7 @@ export function App() {
                             <span className={`pill ${r.status}`}>{r.status}</span>
                           </td>
                           <td className="mono dim-cell">
-                            {r.settlementId ? (
-                              <button
-                                type="button"
-                                className="link-btn"
-                                onClick={() => {
-                                  setTraceSettlementId(r.settlementId!);
-                                  setTab("trace");
-                                }}
-                              >
-                                {shortAddr(r.settlementId)}
-                              </button>
-                            ) : (
-                              "—"
-                            )}
+                            {r.settlementId ? shortAddr(r.settlementId) : "—"}
                           </td>
                         </tr>
                       ))}
@@ -848,6 +854,20 @@ export function App() {
                 </div>
               )}
             </Panel>
+            {selectedActivity && (
+              <ActivityDetail
+                record={selectedActivity}
+                serviceLabel={merchantLabel(selectedActivity.merchantId)}
+                sellerAddress={health?.seller ?? agentStatus?.sellerAddress}
+                isMobile={isMobile}
+                onClose={() => setSelectedActivity(null)}
+                onOpenTrace={(id) => {
+                  setSelectedActivity(null);
+                  setTraceSettlementId(id);
+                  setTab("trace");
+                }}
+              />
+            )}
             </div>
           )}
 

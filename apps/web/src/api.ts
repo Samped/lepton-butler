@@ -38,6 +38,7 @@ export interface SpendRecord {
   merchantId: string;
   amountUsdc: string;
   settlementId?: string;
+  txHash?: string;
   payerAddress?: string;
   executorAddress?: string;
   initiator?: "user" | "system" | "cli";
