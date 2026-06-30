@@ -347,16 +347,16 @@ function getExecutorAddress(): `0x${string}` | null {
 app.get("/api/agent/status", async (_req, res) => {
   try {
     const state = loadState(STATE_PATH);
-    const executorAddress = getExecutorAddress();
-    const readiness = agentRunReadiness();
     const circleExecutor = resolveCircleExecutorAddress();
+    const executorAddress = circleExecutor ?? (hasActiveUserSession() ? null : getExecutorAddress());
+    const readiness = agentRunReadiness();
     if (!circleExecutor && circleCliLoggedIn()) {
       void Promise.resolve().then(() => ensureCircleExecutor());
     }
     const gatewayBalanceUsdc = getGatewayBalanceForApi(circleExecutor);
-    const activityPayerAddresses = resolveActivityPayerAddresses(state.records);
+    const activityPayerAddresses = resolveSessionActivityPayerAddresses(state.records);
     res.json({
-      executorAddress: executorAddress ?? circleExecutor,
+      executorAddress,
       executorReady: readiness.canRun,
       sellerAddress: SELLER,
       circleCli: circleCliInstalled(),

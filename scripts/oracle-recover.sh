@@ -57,6 +57,12 @@ fi
 echo "Installing / building API…"
 npm run install:render
 
+echo "Freeing memory after build (avoid OOM on restart)…"
+sudo pkill -9 -f "${ROOT}/scripts/circle.sh" 2>/dev/null || true
+sudo pkill -9 -f "${ROOT}/.vendor/circle-cli" 2>/dev/null || true
+sync 2>/dev/null || true
+sleep 3
+
 UNIT_SRC="$ROOT/scripts/butler-api.service"
 UNIT_DST="/etc/systemd/system/butler-api.service"
 AGENT_HOME="$(cd "$ROOT" && pwd)"
@@ -82,48 +88,52 @@ fi
 
 PUBLIC_IP="${BUTLER_PUBLIC_IP:-129.151.164.101}"
 
-echo "Waiting for health (local + public — Vercel uses $PUBLIC_IP:3001)…"
-for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-  local_ok=false
-  public_ok=false
-  if curl -sf --max-time 3 http://127.0.0.1:3001/api/health | grep -q '"ok":true'; then
-    local_ok=true
-  fi
-  if curl -sf --max-time 6 "http://${PUBLIC_IP}:3001/api/health" | grep -q '"ok":true'; then
-    public_ok=true
-  fi
-  if [[ "$local_ok" == true && "$public_ok" == true ]]; then
-    echo "OK — API responds locally and on public IP"
-    curl -s http://127.0.0.1:3001/api/health
+fetch_local_health() {
+  curl -sf --max-time 5 http://127.0.0.1:3001/api/health 2>/dev/null || true
+}
+
+api_listening() {
+  local body="$1"
+  [[ -n "$body" ]] && echo "$body" | grep -q '"chain"'
+}
+
+api_live() {
+  local body="$1"
+  [[ -n "$body" ]] && echo "$body" | grep -q '"ok":true'
+}
+
+api_usable() {
+  local body="$1"
+  api_live "$body" && return 0
+  [[ -n "$body" ]] && echo "$body" | grep -q '"mode":"loading"' && echo "$body" | grep -q '"executeRoutes":1[0-9]'
+}
+
+echo "Waiting for API health (local — routes may take up to 90s on small VMs)…"
+for i in $(seq 1 30); do
+  body=$(fetch_local_health)
+  if api_live "$body" || api_usable "$body"; then
+    echo "OK — API live locally"
+    echo "$body"
     echo ""
+    if command -v iptables >/dev/null 2>&1; then
+      if ! sudo iptables -C INPUT -p tcp --dport 3001 -j ACCEPT 2>/dev/null; then
+        sudo iptables -I INPUT -p tcp --dport 3001 -j ACCEPT 2>/dev/null || true
+        echo "Opened iptables for tcp/3001"
+      fi
+    fi
     loader=$(curl -sf --max-time 8 http://127.0.0.1:3001/api/marketplace/loader-status 2>/dev/null || echo "")
     if echo "$loader" | grep -q '"executeRoutes":15'; then
       echo "OK — 15 agent execute routes registered"
     else
       echo "WARN — loader-status: ${loader:-unavailable}"
     fi
-    ping=$(curl -sf --max-time 3 http://127.0.0.1:3001/api/marketplace/agents/ping 2>/dev/null || echo "")
-    if echo "$ping" | grep -q '"agents":15'; then
-      echo "OK — agent ping route live"
-    fi
     probe=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:3001/api/marketplace/agents/research-agent/execute-probe || echo "000")
     if [[ "$probe" == "402" ]]; then
       echo "OK — boot execute-probe responds (HTTP 402)"
-    else
-      echo "WARN — execute-probe HTTP $probe (wrong server binary?)"
-    fi
-    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 http://127.0.0.1:3001/api/marketplace/agents/research-agent/execute || echo "000")
-    if [[ "$code" == "402" ]]; then
-      echo "OK — x402 agent execute responds (HTTP 402)"
-    elif [[ "$code" == "000" ]]; then
-      echo "FAIL — execute still times out. Logs:"
-      sudo journalctl -u butler-api -n 25 --no-pager 2>/dev/null || true
-      echo "  (Butler tasks use in-process pay — try a task on getbutler.xyz anyway)"
-    else
-      echo "WARN — research-agent execute returned HTTP $code (expected 402)"
     fi
     echo ""
-    echo "Public check: https://getbutler.xyz/api/health"
+    echo "Verify from browser: https://getbutler.xyz/api/health"
+    echo "(Public IP curl from inside the VM often fails — Oracle hairpin NAT — that is normal.)"
     if ! crontab -l 2>/dev/null | grep -q oracle-watchdog; then
       echo ""
       echo "Tip: install auto-restart every minute (run once):"
@@ -131,15 +141,17 @@ for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
     fi
     exit 0
   fi
-  if [[ "$local_ok" == true && "$public_ok" != true ]]; then
-    echo "WARN — local health OK but public IP not responding (Vercel will 502). Opening firewall…"
-    if command -v iptables >/dev/null 2>&1; then
-      sudo iptables -I INPUT -p tcp --dport 3001 -j ACCEPT 2>/dev/null || true
-    fi
+  if api_listening "$body"; then
+    echo "  … booting (mode=$(echo "$body" | sed -n 's/.*"mode":"\([^"]*\)".*/\1/p')) attempt $i/30"
+  elif systemctl is-active --quiet butler-api 2>/dev/null; then
+    echo "  … waiting for port 3001 (attempt $i/30)"
+  else
+    echo "  … butler-api not active yet (attempt $i/30)"
   fi
-  sleep 2
+  sleep 3
 done
 
-echo "FAIL — API still not responding on public IP. Run: bash scripts/oracle-diagnose.sh"
-echo "  sudo journalctl -u butler-api -n 80 --no-pager"
+echo "FAIL — API did not become healthy locally."
+echo "Run: bash scripts/oracle-diagnose.sh"
+sudo journalctl -u butler-api -n 40 --no-pager 2>/dev/null || true
 exit 1

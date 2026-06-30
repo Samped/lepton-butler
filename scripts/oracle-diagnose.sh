@@ -42,7 +42,19 @@ echo ""
 echo "5. butler-api status"
 systemctl is-active butler-api 2>/dev/null || echo "  (not active)"
 systemctl show butler-api -p ActiveState -p SubState -p MainPID -p User -p WorkingDirectory 2>/dev/null || true
-sudo journalctl -u butler-api -n 20 --no-pager 2>/dev/null || true
+echo ""
+echo "5b. Node process"
+ps aux 2>/dev/null | grep -E '[d]ist/server.mjs|[s]erver\.ts' || echo "  (no node API process)"
+echo ""
+echo "5c. Watchdog cron (kills API during boot if health != ok:true — fixed in latest scripts)"
+crontab -l 2>/dev/null | grep -E 'oracle-watchdog|butler' || echo "  (no watchdog cron)"
+if [[ -f /tmp/butler-watchdog.log ]]; then
+  echo "  last watchdog log lines:"
+  tail -5 /tmp/butler-watchdog.log 2>/dev/null | sed 's/^/    /'
+fi
+echo ""
+echo "5d. journal (last 40 lines)"
+sudo journalctl -u butler-api -n 40 --no-pager 2>/dev/null || true
 echo ""
 
 echo "6. Circle CLI"
@@ -54,8 +66,7 @@ fi
 echo ""
 
 echo "Fix if nothing on :3001:"
-echo "  cd $ROOT && npm run circle:install && npm run install:render"
-echo "  sudo pkill -9 -f dist/server.mjs; sudo fuser -k 3001/tcp; sleep 2"
-echo "  sudo systemctl restart butler-api && sleep 5"
-echo "  curl -s http://127.0.0.1:3001/api/health"
+echo "  git pull && bash scripts/oracle-recover.sh"
+echo "  (If watchdog cron is old: it restarts API every minute during boot — pull fixes oracle-watchdog.sh)"
+echo "  sudo systemctl restart butler-api && sleep 45 && curl -s http://127.0.0.1:3001/api/health"
 echo "  Browser: https://getbutler.xyz/api/health"

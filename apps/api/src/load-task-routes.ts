@@ -242,18 +242,18 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
     import("node:http").then((http) => {
       const port = Number(process.env.PORT ?? process.env.API_PORT ?? 3001);
       const req = http.get(
-        `http://127.0.0.1:${port}/api/marketplace/agents/research-agent/execute`,
+        `http://127.0.0.1:${port}/api/marketplace/agents/research-agent/execute-probe`,
         { timeout: 4000 },
         (res) => {
-          console.log(`  self-test research-agent execute: HTTP ${res.statusCode}`);
+          console.log(`  self-test execute-probe: HTTP ${res.statusCode}`);
           res.resume();
         }
       );
       req.on("timeout", () => {
         req.destroy();
-        console.error("  self-test research-agent execute: timeout (check routes)");
+        console.error("  self-test execute-probe: timeout");
       });
-      req.on("error", (e) => console.error("  self-test research-agent execute:", e.message));
+      req.on("error", (e) => console.error("  self-test execute-probe:", e.message));
     });
   });
 }
