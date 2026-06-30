@@ -867,6 +867,57 @@ code {
   cursor: not-allowed;
 }
 
+/* Activity / Trace — scroll inside panel body (long ledger tables) */
+.main-inner--scroll-pane {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.activity-view,
+.trace-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.main-inner--scroll-pane .activity-view > .panel,
+.main-inner--scroll-pane .trace-panel > .panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-inner--scroll-pane .panel-head {
+  flex-shrink: 0;
+}
+
+.main-inner--scroll-pane .panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.app-shell.is-mobile.app-shell--scroll-pane .main-inner {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.app-shell.is-mobile.app-shell--scroll-pane .activity-view,
+.app-shell.is-mobile.app-shell--scroll-pane .trace-panel {
+  margin: 0.75rem;
+  min-height: 0;
+}
+
 .activity-panel-mine .panel-head h2 {
   color: var(--accent);
 }

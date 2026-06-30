@@ -368,7 +368,7 @@ export function App() {
 
   return (
     <div
-      className={`app-shell ${isMobile ? "is-mobile" : ""} ${tab === "agent" ? "app-shell--chat" : ""} ${tab === "library" ? "app-shell--library" : ""}`}
+      className={`app-shell ${isMobile ? "is-mobile" : ""} ${tab === "agent" ? "app-shell--chat" : ""} ${tab === "library" ? "app-shell--library" : ""} ${tab === "activity" || tab === "trace" ? "app-shell--scroll-pane" : ""}`}
     >
       {!isMobile && (
       <aside className="sidebar">
@@ -612,7 +612,7 @@ export function App() {
         </header>
         )}
 
-        <div className="main-inner">
+        <div className={`main-inner ${tab === "activity" || tab === "trace" ? "main-inner--scroll-pane" : ""}`}>
           {workflowMessage && tab === "marketplace" && (
             <div
               className={`inline-alert ${
@@ -739,6 +739,7 @@ export function App() {
           )}
 
           {tab === "activity" && (
+            <div className="activity-view">
             <Panel
               title={activityScope === "mine" ? "Your payments" : "Payment ledger"}
               desc={
@@ -847,6 +848,7 @@ export function App() {
                 </div>
               )}
             </Panel>
+            </div>
           )}
 
           {tab === "trace" && (
