@@ -194,10 +194,10 @@ export function AgentChatView({
 
     try {
       const [health, readiness] = await Promise.all([
-        getHealthQuick(),
+        getHealthQuick().catch(() => null),
         getButlerReadiness().catch(() => null),
       ]);
-      if (!health?.ok) {
+      if (health && !health.ok) {
         pushMessage({
           role: "assistant",
           content:
@@ -277,7 +277,7 @@ export function AgentChatView({
     } catch (e) {
       const errMsg = formatWorkflowError(e instanceof Error ? e.message : "Task failed");
       let recovered: { jobId?: string; summary?: string } | null = null;
-      if (/timed out|aborted|cancelled/i.test(errMsg)) {
+      if (/timed out|aborted|cancelled|502|503|504|Cannot reach|Backend offline|busy with a Butler/i.test(errMsg)) {
         try {
           const list = await getMarketplaceDeliverables();
           const match = list.find((j) => (j.brief ?? "").includes(task.slice(0, 40)) || task.includes((j.brief ?? "").slice(0, 40)));

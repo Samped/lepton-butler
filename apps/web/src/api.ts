@@ -988,29 +988,39 @@ export async function runButler(body: {
     throw new Error("Butler did not return a run id — retry the task.");
   }
 
-  const deadline = Date.now() + (IS_LOCAL_API ? 300_000 : 300_000);
+  const deadline = Date.now() + 300_000;
   let delay = 2_000;
   while (Date.now() < deadline) {
-    const status = await request<{
-      status: string;
-      result?: ButlerResult;
-      error?: string;
-      elapsedMs?: number;
-    }>(`/api/butler/run/${started.runId}`, undefined, IS_LOCAL_API ? 20_000 : 25_000, IS_LOCAL_API ? 3 : 8);
+    try {
+      const status = await request<{
+        status: string;
+        result?: ButlerResult;
+        error?: string;
+        elapsedMs?: number;
+      }>(`/api/butler/run/${started.runId}`, undefined, IS_LOCAL_API ? 20_000 : 30_000, IS_LOCAL_API ? 3 : 10);
 
-    if (status.status === "pending" || status.status === "running") {
+      if (status.status === "pending" || status.status === "running") {
+        await new Promise((r) => setTimeout(r, delay));
+        delay = Math.min(delay + 500, 5_000);
+        continue;
+      }
+      if (status.status === "error") {
+        if (status.result) return status.result;
+        throw new Error(status.error ?? "Butler run failed");
+      }
+      if (status.status === "ok" && status.result) {
+        return status.result;
+      }
+      throw new Error(status.error ?? "Butler returned no result");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const retryable =
+        Date.now() + delay < deadline &&
+        /502|503|504|timed out|Cannot reach API|Backend offline|busy with a Butler/i.test(msg);
+      if (!retryable) throw err;
       await new Promise((r) => setTimeout(r, delay));
-      delay = Math.min(delay + 500, 4_000);
-      continue;
+      delay = Math.min(delay + 1_000, 8_000);
     }
-    if (status.status === "error") {
-      if (status.result) return status.result;
-      throw new Error(status.error ?? "Butler run failed");
-    }
-    if (status.status === "ok" && status.result) {
-      return status.result;
-    }
-    throw new Error(status.error ?? "Butler returned no result");
   }
   throw new Error("Butler run timed out. Check Library — the task may still finish in the background.");
 }

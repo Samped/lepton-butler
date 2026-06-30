@@ -5,6 +5,7 @@
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Express, Request, Response } from "express";
+import { sessionIdFromRequest } from "./user-session.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STATE_PATH = resolve(__dirname, "../../../.data/butler-state.json");
@@ -117,6 +118,7 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
       auctionMode:
         req.body?.auctionMode === "etf" ? ("etf" as const) : req.body?.auctionMode === "single" ? ("single" as const) : undefined,
       forceX402: !!req.body?.forceX402,
+      sessionId: sessionIdFromRequest(req) ?? undefined,
     };
     const { startButlerRunJob } = await import("./butler-run-jobs.ts");
     const runId = startButlerRunJob(params);

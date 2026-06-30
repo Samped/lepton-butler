@@ -21,6 +21,7 @@ export type ButlerRunParams = {
   maxBudgetUsdc?: string;
   auctionMode?: "etf" | "single";
   forceX402?: boolean;
+  sessionId?: string;
 };
 
 type ButlerRunJob = {
@@ -71,30 +72,39 @@ function updateJob(runId: string, patch: Partial<ButlerRunJob>): void {
 }
 
 function runWorker(runId: string, params: ButlerRunParams): void {
-  void (async () => {
-    updateJob(runId, { status: "running" });
-    try {
-      const { runButler } = await import("./butler.ts");
-      const timeout = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("Butler run timed out after 4 minutes")), RUN_TIMEOUT_MS);
-      });
-      const result = await Promise.race([runButler(params), timeout]);
-      if (!result?.ok) {
+  const start = () => {
+    void (async () => {
+      updateJob(runId, { status: "running" });
+      try {
+        const { runButler } = await import("./butler.ts");
+        const timeout = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("Butler run timed out after 4 minutes")), RUN_TIMEOUT_MS);
+        });
+        const result = await Promise.race([runButler(params), timeout]);
+        if (!result?.ok) {
+          updateJob(runId, {
+            status: "error",
+            result,
+            error: result?.error ?? "Butler returned no result",
+          });
+          return;
+        }
+        updateJob(runId, { status: "ok", result });
+      } catch (error) {
         updateJob(runId, {
           status: "error",
-          result,
-          error: result?.error ?? "Butler returned no result",
+          error: error instanceof Error ? error.message : "Butler failed",
         });
-        return;
       }
-      updateJob(runId, { status: "ok", result });
-    } catch (error) {
-      updateJob(runId, {
-        status: "error",
-        error: error instanceof Error ? error.message : "Butler failed",
-      });
-    }
-  })();
+    })();
+  };
+  if (params.sessionId) {
+    void import("./user-session.ts").then(({ runWithUserSession }) => {
+      runWithUserSession(params.sessionId!, start);
+    });
+    return;
+  }
+  start();
 }
 
 export function startButlerRunJob(params: ButlerRunParams): string {
