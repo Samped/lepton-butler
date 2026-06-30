@@ -315,6 +315,22 @@ export function App() {
   const merchantLabel = (merchantId: string) =>
     policy?.merchants.find((m) => m.id === merchantId)?.label ?? SERVICE_LABELS[merchantId] ?? merchantId;
 
+  const userWallet =
+    circleStatus?.loggedIn && circleStatus.executorAddress
+      ? circleStatus.executorAddress
+      : agentStatus?.circleExecutorAddress ?? null;
+
+  const gatewayBalance =
+    circleStatus?.gatewayBalanceUsdc ?? agentStatus?.gatewayBalanceUsdc ?? null;
+  const gatewayLabel =
+    gatewayBalance != null ? `$${formatUsdc(gatewayBalance)}` : "—";
+  const gatewayLow = Number(gatewayBalance ?? 0) === 0;
+
+  const activityCountLabel =
+    activityScope === "mine"
+      ? `${activityRecords.length} yours · ${ledgerTotalCount || ledger.length} total on Butler`
+      : `${activityRecords.length} payments`;
+
   const primaryPayerLabel = userWallet || agentStatus?.circleExecutorAddress || activityPayerAddresses[0] || "";
 
   const activityWalletDesc =
@@ -334,11 +350,6 @@ export function App() {
     activityPayerAddresses.length > 0 ||
     !!agentStatus?.circleExecutorAddress ||
     payerReady;
-
-  const activityCountLabel =
-    activityScope === "mine"
-      ? `${activityRecords.length} yours · ${ledgerTotalCount || ledger.length} total on Butler`
-      : `${activityRecords.length} payments`;
 
   const live = health?.mode !== "dev";
   const dailyLimit = policy ? Number(policy.dailyLimitUsdc) : 0;
@@ -364,16 +375,6 @@ export function App() {
   }
 
   const activeNav = NAV.find((n) => n.id === tab)!;
-  const userWallet =
-    circleStatus?.loggedIn && circleStatus.executorAddress
-      ? circleStatus.executorAddress
-      : agentStatus?.circleExecutorAddress ?? null;
-
-  const gatewayBalance =
-    circleStatus?.gatewayBalanceUsdc ?? agentStatus?.gatewayBalanceUsdc ?? null;
-  const gatewayLabel =
-    gatewayBalance != null ? `$${formatUsdc(gatewayBalance)}` : "—";
-  const gatewayLow = Number(gatewayBalance ?? 0) === 0;
 
   const accountLabel = circleStatus?.loggedIn
     ? circleStatus.email
