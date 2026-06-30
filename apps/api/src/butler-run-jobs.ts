@@ -6,7 +6,13 @@ import type { ButlerResult } from "./butler.ts";
 
 const JOBS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../.data/butler-run-jobs");
 const JOB_TTL_MS = 2 * 60 * 60 * 1000;
-const RUN_TIMEOUT_MS = 240_000;
+const DEFAULT_RUN_TIMEOUT_MS = 300_000;
+const ETF_RUN_TIMEOUT_MS = 600_000;
+
+function runTimeoutMs(params: ButlerRunParams): number {
+  if (params.auctionMode === "etf" || params.qualityTier === "full") return ETF_RUN_TIMEOUT_MS;
+  return DEFAULT_RUN_TIMEOUT_MS;
+}
 
 export type ButlerRunParams = {
   brief: string;
@@ -77,8 +83,12 @@ function runWorker(runId: string, params: ButlerRunParams): void {
       updateJob(runId, { status: "running" });
       try {
         const { runButler } = await import("./butler.ts");
+        const timeoutMs = runTimeoutMs(params);
         const timeout = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error("Butler run timed out after 4 minutes")), RUN_TIMEOUT_MS);
+          setTimeout(
+            () => reject(new Error(`Butler run timed out after ${Math.round(timeoutMs / 60_000)} minutes`)),
+            timeoutMs
+          );
         });
         const result = await Promise.race([runButler(params), timeout]);
         if (!result?.ok) {

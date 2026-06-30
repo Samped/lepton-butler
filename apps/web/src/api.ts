@@ -779,6 +779,24 @@ export interface AuctionEvent {
 export type QualityTier = "brief" | "standard" | "full";
 export type AuctionMode = "single" | "etf";
 
+export class ButlerRunTimeoutError extends Error {
+  readonly runId: string;
+
+  constructor(runId: string) {
+    super("Butler run timed out. Check Library — the task may still finish in the background.");
+    this.name = "ButlerRunTimeoutError";
+    this.runId = runId;
+  }
+}
+
+function butlerPollDeadlineMs(body: {
+  qualityTier?: QualityTier;
+  auctionMode?: AuctionMode;
+}): number {
+  if (body.auctionMode === "etf" || body.qualityTier === "full") return 600_000;
+  return 300_000;
+}
+
 export interface ReverseAuction {
   id: string;
   at: number;
@@ -959,6 +977,15 @@ export type PayerAgentPhase = ButlerPhase;
 /** @deprecated Use ButlerQuote */
 export type PayerAgentQuote = ButlerQuote;
 
+export function getButlerRunStatus(runId: string) {
+  return request<{
+    status: string;
+    result?: ButlerResult;
+    error?: string;
+    elapsedMs?: number;
+  }>(`/api/butler/run/${runId}`, undefined, IS_LOCAL_API ? 20_000 : 30_000, IS_LOCAL_API ? 3 : 10);
+}
+
 export async function runButler(body: {
   brief: string;
   category?: string;
@@ -988,16 +1015,12 @@ export async function runButler(body: {
     throw new Error("Butler did not return a run id — retry the task.");
   }
 
-  const deadline = Date.now() + 300_000;
+  const runId = started.runId;
+  const deadline = Date.now() + butlerPollDeadlineMs(body);
   let delay = 2_000;
   while (Date.now() < deadline) {
     try {
-      const status = await request<{
-        status: string;
-        result?: ButlerResult;
-        error?: string;
-        elapsedMs?: number;
-      }>(`/api/butler/run/${started.runId}`, undefined, IS_LOCAL_API ? 20_000 : 30_000, IS_LOCAL_API ? 3 : 10);
+      const status = await getButlerRunStatus(runId);
 
       if (status.status === "pending" || status.status === "running") {
         await new Promise((r) => setTimeout(r, delay));
@@ -1022,7 +1045,7 @@ export async function runButler(body: {
       delay = Math.min(delay + 1_000, 8_000);
     }
   }
-  throw new Error("Butler run timed out. Check Library — the task may still finish in the background.");
+  throw new ButlerRunTimeoutError(runId);
 }
 
 /** @deprecated Use runButler */

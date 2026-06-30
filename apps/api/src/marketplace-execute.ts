@@ -347,22 +347,19 @@ export async function executeLocalAgentPay(
   };
 }
 
-/** Circle facilitator can hang on small VMs — cap wait and return 402 for unpaid requests. */
+/** Circle facilitator can hang on small VMs — cap wait; never return a fake 402 (breaks Circle CLI). */
 function gatewayRequireWithTimeout(gateway: Gateway, price: string): RequestHandler {
   const gate = gateway.require(price);
-  const amountUsdc = price.replace("$", "");
-  const timeoutMs = Number(process.env.BUTLER_X402_GATEWAY_TIMEOUT_MS ?? 8_000);
+  const timeoutMs = Number(process.env.BUTLER_X402_GATEWAY_TIMEOUT_MS ?? 45_000);
 
   return (req, res, next) => {
     let settled = false;
     const timer = setTimeout(() => {
       if (settled || res.headersSent) return;
       settled = true;
-      res.status(402).json({
-        error: "payment_required",
-        price,
-        amount_usdc: amountUsdc,
-        x402: true,
+      res.status(503).json({
+        error: "payment_gate_warming",
+        message: "x402 payment gate is still initializing. Retry in a few seconds.",
       });
     }, timeoutMs);
 
@@ -493,9 +490,7 @@ export function registerAgentExecuteRoutes(
     };
   }
 
-  const useLiteGate = process.env.BUTLER_LITE_API === "true" || !gateway;
-
-  if (useLiteGate) {
+  if (!gateway) {
     for (const [agentId, svc] of Object.entries(AGENT_SERVICES)) {
       app.get(`/api/marketplace/agents/${agentId}/execute`, (req: PaidRequest, res: Response) => {
         if (!req.payment?.verified) {
@@ -551,5 +546,33 @@ export async function createMarketplaceGateway(sellerAddress: string): Promise<G
     sellerAddress,
     facilitatorUrl: process.env.GATEWAY_FACILITATOR_URL ?? GATEWAY_FACILITATOR,
     networks: [ARC_EIP155],
+  });
+}
+
+/** Pre-fetch Gateway supported kinds so the first Circle CLI pay gets a valid PAYMENT-REQUIRED header. */
+export async function warmGatewayFacilitator(gateway: Gateway): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const handler = gateway.require("$0.001");
+    const req = { headers: {} as Record<string, string>, url: "/api/marketplace/agents/ping" };
+    const res = {
+      _status: 0,
+      headersSent: false,
+      setHeader() {
+        return this;
+      },
+      get statusCode() {
+        return this._status;
+      },
+      set statusCode(code: number) {
+        this._status = code;
+      },
+      end() {
+        resolve();
+      },
+    };
+    void handler(req as Parameters<typeof handler>[0], res as Parameters<typeof handler>[1], () => {
+      resolve();
+    });
+    setTimeout(resolve, 30_000);
   });
 }

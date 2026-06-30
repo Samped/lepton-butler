@@ -4,8 +4,10 @@ import {
   formatUsdc,
   getMarketplaceDeliverables,
   getButlerReadiness,
+  getButlerRunStatus,
   getHealthQuick,
   runButler,
+  ButlerRunTimeoutError,
   type AuctionMode,
   type ButlerResult,
   type QualityTier,
@@ -183,8 +185,8 @@ export function AgentChatView({
     setBusy(true);
     setCompletionToast(null);
 
-    const express = resolveExpressBrief(task);
     const deepWork = resolveDeepWorkRouting(task);
+    const express = deepWork || qualityTier === "full" ? null : resolveExpressBrief(task);
     const effectiveTier = express ? ("brief" as QualityTier) : deepWork ? deepWork.qualityTier : qualityTier;
     const taskOptions = {
       qualityTier: effectiveTier,
@@ -277,7 +279,17 @@ export function AgentChatView({
     } catch (e) {
       const errMsg = formatWorkflowError(e instanceof Error ? e.message : "Task failed");
       let recovered: { jobId?: string; summary?: string } | null = null;
-      if (/timed out|aborted|cancelled|502|503|504|Cannot reach|Backend offline|busy with a Butler/i.test(errMsg)) {
+      if (e instanceof ButlerRunTimeoutError) {
+        try {
+          const status = await getButlerRunStatus(e.runId);
+          if (status.status === "ok" && status.result?.jobId) {
+            recovered = { jobId: status.result.jobId, summary: status.result.summary };
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      if (!recovered?.summary && /timed out|aborted|cancelled|502|503|504|Cannot reach|Backend offline|busy with a Butler/i.test(errMsg)) {
         try {
           const list = await getMarketplaceDeliverables();
           const match = list.find((j) => (j.brief ?? "").includes(task.slice(0, 40)) || task.includes((j.brief ?? "").slice(0, 40)));

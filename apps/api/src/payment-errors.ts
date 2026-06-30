@@ -29,6 +29,9 @@ export function formatPaymentError(raw: string): string {
   if (/configure circle login|payer address not set|payer not configured/i.test(text)) {
     return "Payer wallet not configured. Log in via Payer and select an agent wallet.";
   }
+  if (/no supported payment method|missing payment-required header|no payment options in 402/i.test(text)) {
+    return "Agent paywall was misconfigured (invalid x402 402). Restart the API after deploy so execute routes use Circle Gateway middleware.";
+  }
 
   const first =
     text

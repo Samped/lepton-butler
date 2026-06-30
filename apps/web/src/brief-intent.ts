@@ -27,7 +27,16 @@ function isLightLiteratureBrief(brief: string): boolean {
 }
 
 export function resolveDeepWorkRouting(brief: string): { qualityTier: "full"; auctionMode: "etf" } | null {
-  if (!wantsDeepBrief(brief)) return null;
+  if (wantsDeepBrief(brief)) return { qualityTier: "full", auctionMode: "etf" };
+  return resolveBtcPipelineRouting(brief);
+}
+
+/** BTC on-chain + DeFi briefs need the multi-agent BTC ETF, not a single on-chain agent. */
+export function resolveBtcPipelineRouting(brief: string): { qualityTier: "full"; auctionMode: "etf" } | null {
+  const t = brief.toLowerCase();
+  if (!/\b(btc|bitcoin)\b/.test(t)) return null;
+  if (!/on[- ]?chain|onchain|whale|exchange flow|defi|decentralized finance/.test(t)) return null;
+  if (isChartOnlyBrief(brief) || isMarketQuoteBrief(brief)) return null;
   return { qualityTier: "full", auctionMode: "etf" };
 }
 
@@ -95,7 +104,8 @@ export function isOnchainOnlyBrief(brief: string): boolean {
     ((/inflow|outflow/.test(t) || /\btransfer(s)?\b/.test(t)) &&
       /\b(exchange|btc|bitcoin|eth|ethereum|solana|crypto|whale)\b/.test(t) &&
       !/pragma\s+solidity|smart contract/.test(t));
-  return wantsOnchain && !wantsDeepBrief(brief) && !isChartOnlyBrief(brief);
+  const alsoWantsDefi = /\bdefi\b|decentralized finance|defi exposure/.test(t);
+  return wantsOnchain && !alsoWantsDefi && !wantsDeepBrief(brief) && !isChartOnlyBrief(brief);
 }
 
 export function isMarketQuoteBrief(brief: string): boolean {

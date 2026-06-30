@@ -149,12 +149,10 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
 
   const [
     { registerRegistryRoutes },
-    { createMarketplaceGateway, registerAgentExecuteRoutes },
     { buildJobSummary, inferPlanFromJob },
     { loadMarketplaceState },
   ] = await Promise.all([
     import("./registry-routes.ts"),
-    import("./marketplace-execute.ts"),
     import("./marketplace-task.ts"),
     import("@butler/core"),
   ]);
@@ -162,8 +160,11 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
   const apiBase = resolveApiBase();
 
   try {
-    const useLiteGate = process.env.BUTLER_LITE_API === "true";
-    const gateway = useLiteGate ? null : await createMarketplaceGateway(SELLER);
+    const { createMarketplaceGateway, registerAgentExecuteRoutes, warmGatewayFacilitator } = await import(
+      "./marketplace-execute.ts"
+    );
+    const gateway = await createMarketplaceGateway(SELLER);
+    await warmGatewayFacilitator(gateway);
     // Register execute routes before registry so /agents/:agentId/execute is not shadowed.
     registerAgentExecuteRoutes(app, gateway, {
       statePath: STATE_PATH,
