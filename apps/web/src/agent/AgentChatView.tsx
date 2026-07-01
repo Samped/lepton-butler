@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { resolveExpressBrief, resolveDeepWorkRouting } from "../brief-intent.ts";
 import {
+  buildTaskBriefWithPreferences,
   formatUsdc,
   getMarketplaceDeliverables,
   getButlerReadiness,
   getButlerRunStatus,
+  getUserPreferences,
   pollButlerRunUntilDone,
   getHealthQuick,
   runButler,
@@ -12,6 +14,7 @@ import {
   type AuctionMode,
   type ButlerResult,
   type QualityTier,
+  type UserUsagePreferences,
 } from "../api.ts";
 import { butlerResultToToast, TaskCompletionToast, type TaskCompletionToastState } from "../marketplace/CreateTaskModal.tsx";
 import { formatWorkflowError } from "../format.ts";
@@ -108,8 +111,19 @@ export function AgentChatView({
   const [busy, setBusy] = useState(false);
   const [completionToast, setCompletionToast] = useState<TaskCompletionToastState | null>(null);
   const [attachment, setAttachment] = useState<AttachedDocument | null>(null);
+  const [usagePrefs, setUsagePrefs] = useState<UserUsagePreferences>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    void getUserPreferences().then((p) => {
+      setUsagePrefs(p);
+      if (p.defaultQualityTier) setQualityTier(p.defaultQualityTier);
+      if (p.defaultCategory) setCategory(p.defaultCategory);
+      if (p.defaultMaxBudgetUsdc) setMaxBudgetUsdc(p.defaultMaxBudgetUsdc);
+      if (p.defaultAuctionMode) setAuctionMode(p.defaultAuctionMode);
+    });
+  }, []);
 
   useEffect(() => {
     if (qualityTier === "full") {
@@ -165,7 +179,7 @@ export function AgentChatView({
   };
 
   const handleSubmit = async () => {
-    const task = composeTask(input, attachment);
+    const task = buildTaskBriefWithPreferences(composeTask(input, attachment), usagePrefs);
     if (!task || busy) return;
 
     if (!canRun) {

@@ -20,7 +20,6 @@ import {
   type SpendRecord,
 } from "./api.ts";
 import {
-  BudgetRing,
   EmptyState,
   MetricChip,
   Panel,
@@ -40,12 +39,11 @@ import {
 } from "./icons.tsx";
 import { PaymentTrace } from "./trace/PaymentTrace.tsx";
 import { ActivityDetail } from "./activity/ActivityDetail.tsx";
-import { StackStatusPanel } from "./trace/StackStatus.tsx";
 import { MarketplaceView } from "./marketplace/MarketplaceView.tsx";
 import { AgentChatView } from "./agent/AgentChatView.tsx";
 import { DeliverablesView } from "./deliverables/DeliverablesView.tsx";
 import { CircleLoginPanel } from "./circle/CircleLoginPanel.tsx";
-import { PolicyEditor } from "./policy/PolicyEditor.tsx";
+import { PolicyView } from "./policy/PolicyView.tsx";
 import { formatWorkflowError } from "./format.ts";
 import { useIsMobile } from "./use-mobile.ts";
 
@@ -122,13 +120,18 @@ export function App() {
     try {
       const [ledgerRes, statusRes] = await Promise.allSettled([getLedger(scope), getAgentStatus()]);
       if (ledgerRes.status === "fulfilled") {
-        setActivityRecords(ledgerRes.value.records);
-        setRemaining(ledgerRes.value.remainingDailyUsdc);
-        setLedgerTotalCount(ledgerRes.value.totalCount ?? ledgerRes.value.records.length);
+        const records = ledgerRes.value.records;
+        const total = ledgerRes.value.totalCount ?? records.length;
+        const remainingDaily = ledgerRes.value.remainingDailyUsdc;
+        if (scope === "all") {
+          setLedger(records);
+        }
+        setActivityRecords(records);
+        setRemaining(remainingDaily);
+        setLedgerTotalCount(total);
         if (ledgerRes.value.activityPayerAddresses?.length) {
           setActivityPayerAddresses(ledgerRes.value.activityPayerAddresses);
         }
-        if (scope === "all") setLedger(ledgerRes.value.records);
       } else if (ledgerRes.status === "rejected") {
         const msg = ledgerRes.reason instanceof Error ? ledgerRes.reason.message : "Ledger unavailable";
         setError(msg);
@@ -278,12 +281,6 @@ export function App() {
     if (tab !== "activity") return;
     void loadActivityLedger(activityScope);
   }, [tab, activityScope, loadActivityLedger]);
-
-  useEffect(() => {
-    if (tab === "activity" && activityScope === "all") {
-      setActivityRecords(ledger);
-    }
-  }, [ledger, tab, activityScope]);
 
   useEffect(() => {
     if (!isMobile) {
@@ -750,23 +747,14 @@ export function App() {
 
           {tab === "policy" && (
             policy ? (
-            <>
-              <div className="policy-strip">
-                <BudgetRing spent={spentToday} total={dailyLimit} compact />
-                <div className="policy-strip-copy">
-                  <span className="policy-strip-value">${formatUsdc(remaining)}</span>
-                  <span className="policy-strip-label">
-                    remaining · ${formatUsdc(policy.dailyLimitUsdc)} daily · ${formatUsdc(policy.weeklyLimitUsdc)} weekly
-                  </span>
-                </div>
-              </div>
-
-              <Panel title="Infrastructure" desc="Circle CLI · x402 · Arc trace" className="marketplace-section">
-                <StackStatusPanel embedded />
-              </Panel>
-
-              <PolicyEditor policy={policy} onChange={setPolicy} />
-            </>
+              <PolicyView
+                policy={policy}
+                onPolicyChange={setPolicy}
+                remaining={remaining}
+                spentToday={spentToday}
+                dailyLimit={dailyLimit}
+                payerLoggedIn={payerLoggedIn}
+              />
             ) : (
               <EmptyState title="Loading policy" desc="Syncing spend limits and merchants from the API." />
             )

@@ -8,7 +8,6 @@ import type { Express, Request, Response } from "express";
 import { sessionIdFromRequest, hasActiveUserSession } from "./user-session.ts";
 import { filterJobsForOwner, jobVisibleToOwner, resolveJobOwnerFromRequest } from "./job-owner.ts";
 import { resolveButlerStatePath, resolveMarketplaceStatePath } from "./data-paths.ts";
-import { handleGetLedger } from "./ledger-handlers.ts";
 import { handleGetPolicy, handlePutPolicy, handleResetPolicy } from "./policy-handlers.ts";
 import { handleGetUserPreferences, handlePutUserPreferences } from "./user-preferences.ts";
 import { registerAuctionRoutes } from "./auction-routes.ts";

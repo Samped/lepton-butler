@@ -761,6 +761,455 @@ code {
   color: #f87171;
 }
 
+/* ─── Policy page (pro layout) ─── */
+.policy-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+  min-width: 0;
+  padding-bottom: 5rem;
+}
+
+.policy-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.5rem 1.75rem;
+  background: linear-gradient(145deg, var(--surface) 0%, var(--surface-raised) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.policy-eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 0.35rem;
+}
+
+.policy-title {
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  margin: 0 0 0.5rem;
+}
+
+.policy-subtitle {
+  margin: 0;
+  max-width: 36rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.policy-hero-stats {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.policy-hero-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.policy-metric-label {
+  display: block;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.policy-metric-value {
+  font-size: 1.125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.policy-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.policy-tab {
+  flex: 1 1 auto;
+  min-width: 7rem;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.policy-tab:hover {
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+.policy-tab.active {
+  color: var(--text);
+  background: var(--surface-raised);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.policy-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.policy-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.policy-textarea {
+  min-height: 5rem;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.policy-form-grid--wide {
+  margin-top: 1rem;
+}
+
+.policy-preset-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
+}
+
+.policy-preset-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.policy-preset-card:hover {
+  border-color: var(--border-hover);
+}
+
+.policy-preset-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.policy-preset-label {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.policy-preset-value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.policy-preset-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.policy-spend-bar {
+  height: 6px;
+  background: var(--surface-raised);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 0.35rem;
+}
+
+.policy-spend-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #fff));
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.policy-instance-note {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.policy-table-wrap {
+  overflow-x: auto;
+  margin: 0 -0.25rem;
+}
+
+.policy-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.policy-table th {
+  text-align: left;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 0.5rem 0.65rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.policy-table td {
+  padding: 0.65rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.policy-table tr.dim {
+  opacity: 0.55;
+}
+
+.policy-table-agent {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.policy-table-input {
+  width: 5.5rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.policy-route {
+  font-size: 0.7rem;
+  word-break: break-all;
+}
+
+.policy-infra-panel {
+  opacity: 0.95;
+}
+
+.policy-save-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  margin: 0 -0.25rem;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15);
+}
+
+.policy-save-bar-copy {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.app-shell.is-mobile .policy-hero {
+  flex-direction: column;
+  padding: 1.25rem;
+}
+
+.app-shell.is-mobile .policy-tabs {
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+
+.app-shell.is-mobile .policy-tab {
+  flex: 0 0 auto;
+}
+
+.policy-hero-topline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.15rem;
+}
+
+.policy-status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.policy-status-chips .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.policy-toast {
+  margin: 0.75rem 0 0;
+  padding: 0.55rem 0.85rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.8125rem;
+}
+
+.policy-toast--ok {
+  background: var(--accent-muted);
+  color: var(--accent-hover);
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.policy-toast--err {
+  background: color-mix(in srgb, #f87171 12%, var(--surface));
+  color: #f87171;
+  border: 1px solid color-mix(in srgb, #f87171 30%, transparent);
+}
+
+.policy-tab.editing {
+  color: var(--accent-hover);
+}
+
+.policy-tab-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 0.35rem;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+
+.policy-panel--editing {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.policy-page--editing {
+  padding-bottom: 6rem;
+}
+
+.policy-section-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.policy-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.policy-view-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.policy-view-grid--cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 1rem 1.5rem;
+}
+
+.policy-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 11rem) 1fr;
+  gap: 0.5rem 1rem;
+  align-items: baseline;
+  padding: 0.65rem 0.85rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+}
+
+.policy-row--multiline {
+  align-items: start;
+}
+
+.policy-row-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.policy-row-value {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.policy-row-value--block {
+  margin: 0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.policy-row-empty {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.policy-editing-label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent-hover);
+  margin-bottom: 0.15rem;
+}
+
+.policy-save-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.app-shell.is-mobile .policy-row {
+  grid-template-columns: 1fr;
+  gap: 0.25rem;
+}
+
+.app-shell.is-mobile .policy-save-bar {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.app-shell.is-mobile .policy-save-bar-actions {
+  width: 100%;
+}
+
+.app-shell.is-mobile .policy-save-bar-actions .btn {
+  flex: 1;
+}
+
 /* ─── Hero (legacy) ─── */
 .hero-card {
   position: relative;

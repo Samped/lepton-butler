@@ -161,20 +161,23 @@ export function resolveActivityPayerAddresses(records?: SpendRecord[]): string[]
   return [...set];
 }
 
-/** Backfill payer fields on legacy rows once Gateway payer is known. */
+/** Learn Gateway payer for this session from ledger rows — do not mutate rows (breaks Activity "Mine"). */
 export function attributeLedgerRecords(records: SpendRecord[]): SpendRecord[] {
   inferGatewayPayerFromLedger(records);
-  const executor = getExecutorWalletAddress();
-  const gateway = loadCircleConfig().gatewayPayerAddress;
-  if (!executor && !gateway) return records;
-  return records.map((r) => {
-    if (r.payerAddress || r.executorAddress) return r;
-    return {
-      ...r,
-      payerAddress: gateway ?? executor ?? undefined,
-      executorAddress: executor ?? undefined,
-    };
-  });
+  return records;
+}
+
+/** Payer fields for job backfill — only explicit step/job data, never the current session wallet. */
+export function resolveJobStepPayer(
+  paymentPayer?: string | null,
+  jobExecutor?: string | null
+): { payerAddress?: string; executorAddress?: string } {
+  const gateway = paymentPayer?.trim();
+  const executor = jobExecutor?.trim();
+  return {
+    payerAddress: gateway || executor || undefined,
+    executorAddress: executor || undefined,
+  };
 }
 
 export function filterMineRecords(records: SpendRecord[], payerAddresses: string[]): SpendRecord[] {
@@ -185,6 +188,35 @@ export function filterMineRecords(records: SpendRecord[], payerAddresses: string
     const executor = r.executorAddress?.toLowerCase();
     return (payer && mine.has(payer)) || (executor && mine.has(executor));
   });
+}
+
+/** Activity "Mine" — connected Circle executor + Gateway payer, plus jobs owned by this browser session. */
+export function filterLedgerForOwnerScope(
+  records: SpendRecord[],
+  owner: JobOwner,
+  jobs: MarketplaceJob[] = [],
+  auctions: ReverseAuction[] = []
+): SpendRecord[] {
+  const payerAddrs = resolveOwnerPayerAddresses(owner);
+  if (payerAddrs.length === 0 && !owner.sessionId) return [];
+
+  const seen = new Set<string>();
+  const out: SpendRecord[] = [];
+  const push = (rows: SpendRecord[]) => {
+    for (const r of rows) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      out.push(r);
+    }
+  };
+
+  if (payerAddrs.length > 0) {
+    push(filterMineRecords(records, payerAddrs));
+  }
+  if (owner.sessionId) {
+    push(filterRecordsForOwner(records, owner, jobs, auctions));
+  }
+  return out;
 }
 
 /** Settlement IDs from jobs this user owns (backfill when ledger rows lack payer fields). */

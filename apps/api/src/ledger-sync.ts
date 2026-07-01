@@ -11,7 +11,7 @@ import {
   type ReverseAuction,
   type SpendRecord,
 } from "@butler/core";
-import { enrichSpendPayer } from "./ledger-payer.ts";
+import { enrichSpendPayer, resolveJobStepPayer } from "./ledger-payer.ts";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
@@ -102,7 +102,7 @@ export function mergeJobSettlementsIntoRecords(
       if (!agent) return;
       if (step.status !== "done" && step.status !== "paid") return;
 
-      const payerMeta = enrichSpendPayer(payerFromStep(step, job));
+      const payerMeta = resolveJobStepPayer(payerFromStep(step, job), job.payerAddress);
       additions.push({
         id: `job-${job.id}-${step.agentId}-${index}`,
         at: stepTimestamp(job, index),

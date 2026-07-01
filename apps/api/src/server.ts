@@ -51,11 +51,6 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-/** Activity ledger — registered at boot (same as health) so it never 404s during async route load. */
-app.get("/api/ledger", (req, res) => {
-  handleGetLedger(req, res, resolveButlerStatePath(), SELLER, resolveMarketplaceStatePath());
-});
-
 app.use(
   cors({
     allowedHeaders: ["Content-Type", "Authorization", "X-Butler-Session"],
@@ -63,6 +58,11 @@ app.use(
 );
 app.use(express.json());
 app.use(userSessionMiddleware);
+
+/** Activity ledger — after session middleware so Mine filter sees the connected Circle wallet. */
+app.get("/api/ledger", (req, res) => {
+  handleGetLedger(req, res, resolveButlerStatePath(), SELLER, resolveMarketplaceStatePath());
+});
 
 /** Login routes — never blocked by heavy route imports. */
 registerCircleLoginRoutes(app);

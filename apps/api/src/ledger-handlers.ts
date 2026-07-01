@@ -3,7 +3,7 @@ import { loadState, remainingDailyUsdc, type SpendRecord } from "@butler/core";
 import {
   applyJobAttribution,
   attributeLedgerRecords,
-  filterMineRecords,
+  filterLedgerForOwnerScope,
   filterRecordsForOwner,
   resolveSessionActivityPayerAddresses,
 } from "./ledger-payer.ts";
@@ -57,29 +57,17 @@ export function handleGetLedger(
       console.warn("[ledger] job attribution skipped:", attrErr);
     }
 
-    const sessionPayers = resolveSessionActivityPayerAddresses(state.records);
     const ownerPayerAddresses = resolveOwnerPayerAddresses(owner);
+    const sessionPayers = resolveSessionActivityPayerAddresses(state.records);
     const activityPayerAddresses =
-      sessionPayers.length > 0 ? sessionPayers : ownerPayerAddresses;
+      ownerPayerAddresses.length > 0 ? ownerPayerAddresses : sessionPayers;
 
     const allRecords = attributed.slice().reverse();
     const hasOwner = !!(owner.sessionId || owner.payerAddress || owner.gatewayPayerAddress);
 
     let records: SpendRecord[];
     if (scope === "mine") {
-      if (owner.sessionId) {
-        records = filterRecordsForOwner(attributed, owner, jobs, auctions);
-        if (records.length === 0 && sessionPayers.length > 0) {
-          records = filterMineRecords(attributed, sessionPayers);
-        }
-      } else if (sessionPayers.length > 0) {
-        records = filterMineRecords(attributed, sessionPayers);
-      } else if (hasOwner) {
-        records = filterRecordsForOwner(attributed, owner, jobs, auctions);
-      } else {
-        records = [];
-      }
-      records = records.slice().reverse();
+      records = filterLedgerForOwnerScope(attributed, owner, jobs, auctions).slice().reverse();
     } else if (hasOwner && scope === "yours") {
       records = filterRecordsForOwner(attributed, owner, jobs, auctions).slice().reverse();
     } else {
