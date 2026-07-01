@@ -21,28 +21,21 @@ import {
 } from "@butler/core";
 import { enrichSpendPayer, spendInitiatorFromMarketplaceQuery } from "./ledger-payer.ts";
 import { readWorkflowContext } from "./context-store.ts";
-import {
-  buildAuditPayload,
-  buildBillPayload,
-  buildChartPayload,
-  buildCompetitorPayload,
-  buildCryptoNewsIntelligencePayload,
-  buildDefiPayload,
-  buildMacroPayload,
-  buildMarketPayload,
-  buildNewsPayload,
-  buildOnchainPayload,
-  buildPortfolioRiskPayload,
-  buildReportPayload,
-  buildResearchPayload,
-  buildRiskPayload,
-  buildSentimentPayload,
-  buildSubscriptionPayload,
-  buildThesisPayload,
-  buildTokenResearchPayload,
-  buildWalletReputationPayload,
-} from "./agent-services.ts";
 import { setExecuteLoadError, setExecuteRouteCount } from "./route-loader-status.ts";
+
+type AgentServicesModule = typeof import("./agent-services.ts");
+let agentServicesModule: Promise<AgentServicesModule> | null = null;
+
+function loadAgentServices(): Promise<AgentServicesModule> {
+  agentServicesModule ??= import("./agent-services.ts");
+  return agentServicesModule;
+}
+
+export function prefetchAgentServices(): void {
+  void loadAgentServices().catch((err) => {
+    console.warn("Agent services prefetch failed:", err instanceof Error ? err.message : err);
+  });
+}
 
 type PaidRequest = Request & {
   payment?: {
@@ -87,7 +80,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "apis",
     policyAgent: "research",
     etaSeconds: 15,
-    payload: (req) => buildNewsPayload(briefFrom(req)),
+    payload: async (req) => {
+      const { buildNewsPayload } = await loadAgentServices();
+      return buildNewsPayload(briefFrom(req));
+    },
   },
   "market-agent": {
     price: "$0.001",
@@ -95,7 +91,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "apis",
     policyAgent: "research",
     etaSeconds: 5,
-    payload: (req) => buildMarketPayload(briefFrom(req)),
+    payload: async (req) => {
+      const { buildMarketPayload } = await loadAgentServices();
+      return buildMarketPayload(briefFrom(req));
+    },
   },
   "research-agent": {
     price: "$0.02",
@@ -103,7 +102,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "apis",
     policyAgent: "research",
     etaSeconds: 20,
-    payload: (req) => buildResearchPayload(briefFrom(req), contextFrom(req)),
+    payload: async (req) => {
+      const { buildResearchPayload } = await loadAgentServices();
+      return buildResearchPayload(briefFrom(req), contextFrom(req));
+    },
   },
   "sentiment-agent": {
     price: "$0.03",
@@ -111,7 +113,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "apis",
     policyAgent: "research",
     etaSeconds: 12,
-    payload: (req) => buildSentimentPayload(briefFrom(req)),
+    payload: async (req) => {
+      const { buildSentimentPayload } = await loadAgentServices();
+      return buildSentimentPayload(briefFrom(req));
+    },
   },
   "chart-agent": {
     price: "$0.015",
@@ -119,7 +124,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "apis",
     policyAgent: "research",
     etaSeconds: 10,
-    payload: (req) => buildChartPayload(briefFrom(req)),
+    payload: async (req) => {
+      const { buildChartPayload } = await loadAgentServices();
+      return buildChartPayload(briefFrom(req));
+    },
   },
   "report-agent": {
     price: "$0.05",
@@ -127,7 +135,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "bills",
     policyAgent: "bills",
     etaSeconds: 25,
-    payload: (req) => buildReportPayload(briefFrom(req), contextFrom(req)),
+    payload: async (req) => {
+      const { buildReportPayload } = await loadAgentServices();
+      return buildReportPayload(briefFrom(req), contextFrom(req));
+    },
   },
   "thesis-agent": {
     price: "$0.069",
@@ -135,7 +146,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "bills",
     policyAgent: "bills",
     etaSeconds: 50,
-    payload: (req) => buildThesisPayload(briefFrom(req), contextFrom(req)),
+    payload: async (req) => {
+      const { buildThesisPayload } = await loadAgentServices();
+      return buildThesisPayload(briefFrom(req), contextFrom(req));
+    },
   },
   "audit-agent": {
     price: "$0.10",
@@ -143,7 +157,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "bills",
     policyAgent: "bills",
     etaSeconds: 45,
-    payload: (req) => buildAuditPayload(briefFrom(req), String(req.query.contract ?? "")),
+    payload: async (req) => {
+      const { buildAuditPayload } = await loadAgentServices();
+      return buildAuditPayload(briefFrom(req), String(req.query.contract ?? ""));
+    },
   },
   "defi-agent": {
     price: "$0.02",
@@ -151,7 +168,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "apis",
     policyAgent: "research",
     etaSeconds: 18,
-    payload: (req) => buildDefiPayload(briefFrom(req)),
+    payload: async (req) => {
+      const { buildDefiPayload } = await loadAgentServices();
+      return buildDefiPayload(briefFrom(req));
+    },
   },
   "macro-agent": {
     price: "$0.025",
@@ -159,7 +179,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "apis",
     policyAgent: "research",
     etaSeconds: 22,
-    payload: (req) => buildMacroPayload(briefFrom(req)),
+    payload: async (req) => {
+      const { buildMacroPayload } = await loadAgentServices();
+      return buildMacroPayload(briefFrom(req));
+    },
   },
   "onchain-agent": {
     price: "$0.018",
@@ -167,7 +190,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "apis",
     policyAgent: "research",
     etaSeconds: 16,
-    payload: (req) => buildOnchainPayload(briefFrom(req)),
+    payload: async (req) => {
+      const { buildOnchainPayload } = await loadAgentServices();
+      return buildOnchainPayload(briefFrom(req));
+    },
   },
   "competitor-agent": {
     price: "$0.03",
@@ -175,7 +201,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "apis",
     policyAgent: "research",
     etaSeconds: 20,
-    payload: (req) => buildCompetitorPayload(briefFrom(req)),
+    payload: async (req) => {
+      const { buildCompetitorPayload } = await loadAgentServices();
+      return buildCompetitorPayload(briefFrom(req));
+    },
   },
   "risk-agent": {
     price: "$0.04",
@@ -183,7 +212,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "apis",
     policyAgent: "research",
     etaSeconds: 18,
-    payload: (req) => buildRiskPayload(briefFrom(req), contextFrom(req)),
+    payload: async (req) => {
+      const { buildRiskPayload } = await loadAgentServices();
+      return buildRiskPayload(briefFrom(req), contextFrom(req));
+    },
   },
   "bill-agent": {
     price: "$0.05",
@@ -191,7 +223,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "bills",
     policyAgent: "bills",
     etaSeconds: 14,
-    payload: (req) => buildBillPayload(briefFrom(req)),
+    payload: async (req) => {
+      const { buildBillPayload } = await loadAgentServices();
+      return buildBillPayload(briefFrom(req));
+    },
   },
   "subscription-agent": {
     price: "$0.03",
@@ -199,7 +234,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "bills",
     policyAgent: "bills",
     etaSeconds: 12,
-    payload: (req) => buildSubscriptionPayload(briefFrom(req)),
+    payload: async (req) => {
+      const { buildSubscriptionPayload } = await loadAgentServices();
+      return buildSubscriptionPayload(briefFrom(req));
+    },
   },
   "portfolio-risk-agent": {
     price: "$0.06",
@@ -207,7 +245,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "apis",
     policyAgent: "research",
     etaSeconds: 22,
-    payload: (req) => buildPortfolioRiskPayload(briefFrom(req), contextFrom(req)),
+    payload: async (req) => {
+      const { buildPortfolioRiskPayload } = await loadAgentServices();
+      return buildPortfolioRiskPayload(briefFrom(req), contextFrom(req));
+    },
   },
   "crypto-news-intelligence-agent": {
     price: "$0.025",
@@ -215,7 +256,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "apis",
     policyAgent: "research",
     etaSeconds: 20,
-    payload: (req) => buildCryptoNewsIntelligencePayload(briefFrom(req)),
+    payload: async (req) => {
+      const { buildCryptoNewsIntelligencePayload } = await loadAgentServices();
+      return buildCryptoNewsIntelligencePayload(briefFrom(req));
+    },
   },
   "wallet-reputation-agent": {
     price: "$0.035",
@@ -223,7 +267,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "apis",
     policyAgent: "research",
     etaSeconds: 18,
-    payload: (req) => buildWalletReputationPayload(briefFrom(req)),
+    payload: async (req) => {
+      const { buildWalletReputationPayload } = await loadAgentServices();
+      return buildWalletReputationPayload(briefFrom(req));
+    },
   },
   "token-research-agent": {
     price: "$0.045",
@@ -231,7 +278,10 @@ const AGENT_SERVICES: Record<string, AgentServiceDef> = {
     category: "apis",
     policyAgent: "research",
     etaSeconds: 28,
-    payload: (req) => buildTokenResearchPayload(briefFrom(req), contextFrom(req)),
+    payload: async (req) => {
+      const { buildTokenResearchPayload } = await loadAgentServices();
+      return buildTokenResearchPayload(briefFrom(req), contextFrom(req));
+    },
   },
 };
 

@@ -102,6 +102,7 @@ async function registerMarketplaceExecuteRoutes(
     }
 
     mod.registerAgentExecuteRoutes(app, gateway, opts);
+    mod.prefetchAgentServices();
     setBootPhase("live");
   } catch (error) {
     const message = error instanceof Error ? error.message : "Execute routes failed to load";
@@ -110,6 +111,7 @@ async function registerMarketplaceExecuteRoutes(
     try {
       const mod = await Promise.race([importPromise, sleep(60_000)]);
       mod.registerAgentExecuteRoutes(app, null, opts);
+      mod.prefetchAgentServices();
       setBootPhase("live-lite");
       console.log("  x402 execute routes: fallback lite mode (no Gateway middleware)");
     } catch (fallbackErr) {
