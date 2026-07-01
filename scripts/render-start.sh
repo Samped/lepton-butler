@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start Butler API — rebuild bundle when possible, but NEVER refuse to start if build fails.
+# Start Butler API — always rebuild bundle (esbuild ~1s), never block start on build failure.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOG="${BUTLER_START_LOG:-/tmp/butler-api-start.log}"
@@ -11,26 +11,10 @@ log() { echo "$(date -Is) $*" | tee -a "$LOG"; }
 
 log "Butler API start (ROOT=$ROOT)"
 
-DIST="$ROOT/apps/api/dist/server.mjs"
-SRC="$ROOT/apps/api/src/server.ts"
-
-needs_build=0
-if [[ ! -f "$DIST" ]]; then
-  needs_build=1
-  log "dist/server.mjs missing — will build"
-elif [[ -f "$SRC" && "$SRC" -nt "$DIST" ]]; then
-  needs_build=1
-  log "source newer than dist — will rebuild"
-fi
-
-if [[ "$needs_build" -eq 1 ]]; then
-  if (cd "$ROOT" && npm run build:render -w @butler/api >> "$LOG" 2>&1); then
-    log "build OK"
-  else
-    log "WARN build failed — continuing with existing dist if available (see $LOG)"
-  fi
+if (cd "$ROOT" && npm run build:render -w @butler/api >> "$LOG" 2>&1); then
+  log "build OK ($(cat "$ROOT/apps/api/dist/build-stamp.json" 2>/dev/null || echo 'no stamp'))"
 else
-  log "dist/server.mjs up to date — skipping build"
+  log "WARN build failed — continuing with existing dist if available (see $LOG)"
 fi
 
 cd "$ROOT/apps/api"
