@@ -18,6 +18,14 @@ export function strategyLabel(strategy?: string): string {
   return "Task";
 }
 
+export function jobStatusLabel(status: string): string | null {
+  if (status === "completed") return null;
+  if (status === "running" || status === "paying") return "In progress";
+  if (status === "pending") return "Queued";
+  if (status === "failed") return "Failed";
+  return status;
+}
+
 export const AGENT_COLORS: Record<string, string> = {
   "news-agent": "#3b82f6",
   "market-agent": "#10b981",

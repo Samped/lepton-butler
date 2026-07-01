@@ -42,7 +42,7 @@ import {
 } from "./external-agent-registry.ts";
 import { probeX402Url } from "./x402-probe.ts";
 import { resolveCircleExecutorAddress } from "./circle-config.ts";
-import { stampAuctionOwner, stampJobOwner } from "./job-owner.ts";
+import { stampAuctionOwner, stampJobOwner, resolveJobOwnerFromSession } from "./job-owner.ts";
 
 export { inferAuctionCategory, resolveTaskCategory } from "@butler/core";
 
@@ -122,7 +122,7 @@ async function settleWinningBid(opts: {
   now: () => number;
 }): Promise<ButlerResult> {
   const { bid } = opts;
-  const owner = { sessionId: opts.sessionId, payerAddress: resolveCircleExecutorAddress() ?? undefined };
+  const owner = resolveJobOwnerFromSession(opts.sessionId);
   const built = bid.etfId ? buildEtfJob(bid.etfId, opts.brief) : buildDirectJob(bid.agentId, opts.brief);
   if (!built) {
     return {
@@ -235,7 +235,7 @@ async function settleFromTaskPlan(opts: {
     };
   }
 
-  const owner = { sessionId: opts.sessionId, payerAddress: resolveCircleExecutorAddress() ?? undefined };
+  const owner = resolveJobOwnerFromSession(opts.sessionId);
   const job = stampJobOwner({ ...built, plan: planToJobPlan(opts.plan) }, owner);
   job.totalUsdc = opts.plan.estimatedUsdc;
   if (opts.plan.etfId) job.etfId = opts.plan.etfId;
@@ -481,7 +481,7 @@ export async function runButler(opts: {
   const phases: ButlerPhase[] = [];
   const now = () => Math.floor(Date.now() / 1000);
   const policy = getExternalAgentPolicy();
-  const owner = { sessionId: opts.sessionId, payerAddress: resolveCircleExecutorAddress() ?? undefined };
+  const owner = resolveJobOwnerFromSession(opts.sessionId);
 
   try {
   loadExternalAgentRegistry();

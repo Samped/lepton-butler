@@ -236,29 +236,20 @@ export function filterRecordsForOwner(
   jobs: MarketplaceJob[] = [],
   auctions: ReverseAuction[] = []
 ): SpendRecord[] {
-  if (!owner.sessionId && !owner.payerAddress && !owner.gatewayPayerAddress) {
+  if (!owner.sessionId && resolveOwnerPayerAddresses(owner).length === 0) {
     return records;
   }
+  const payerAddrs = resolveOwnerPayerAddresses(owner);
   const jobSettlements = collectOwnerSettlementIds(jobs, owner);
   const attributed = applyJobAttribution(attributeLedgerRecords(records), jobs, auctions);
 
   return attributed.filter((r) => {
     if (r.settlementId && jobSettlements.has(r.settlementId)) return true;
-    if (owner.sessionId && r.initiator === "user") {
+    if (payerAddrs.length > 0) {
       const payer = r.payerAddress?.toLowerCase();
       const executor = r.executorAddress?.toLowerCase();
-      const addrs = new Set(resolveOwnerPayerAddresses(owner));
-      if (addrs.size > 0) {
-        if (payer && addrs.has(payer)) return true;
-        if (executor && addrs.has(executor)) return true;
-      }
-    }
-    const payer = r.payerAddress?.toLowerCase();
-    const executor = r.executorAddress?.toLowerCase();
-    const addrs = new Set(resolveOwnerPayerAddresses(owner));
-    if (addrs.size > 0) {
-      if (payer && addrs.has(payer)) return true;
-      if (executor && addrs.has(executor)) return true;
+      if (payer && payerAddrs.includes(payer)) return true;
+      if (executor && payerAddrs.includes(executor)) return true;
     }
     return false;
   });

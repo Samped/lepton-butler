@@ -10,7 +10,7 @@ import { formatWorkflowError } from "../format.ts";
 import { useIsMobile } from "../use-mobile.ts";
 import { PaperDocument, serializePaperForExport } from "./PaperDocument.tsx";
 import { exportPaperPdf } from "./pdfExport.ts";
-import { formatRelativeTime, strategyLabel } from "./utils.ts";
+import { formatRelativeTime, jobStatusLabel, strategyLabel } from "./utils.ts";
 import { auditPaperTitle, isAuditDeliverable } from "./audit.ts";
 import { billPaperTitle, isBillDeliverable } from "./bill.ts";
 import { isIntelPayload } from "./defi-agents.tsx";
@@ -285,6 +285,7 @@ export function DeliverablesView({
               {filtered.map((job) => {
                 const active = selected?.id === job.id;
                 const strategy = strategyLabel(job.plan?.strategy);
+                const statusLabel = jobStatusLabel(job.status);
                 return (
                   <li key={job.id}>
                     <button
@@ -296,6 +297,7 @@ export function DeliverablesView({
                     >
                       <div className="library-list-item-top">
                         <span className={`library-type-badge ${job.plan?.strategy ?? "direct"}`}>{strategy}</span>
+                        {statusLabel && <span className="library-type-badge running">{statusLabel}</span>}
                         <span className="library-list-time">{formatRelativeTime(job.at)}</span>
                       </div>
                       <p className="library-list-title">{listTitle(job)}</p>

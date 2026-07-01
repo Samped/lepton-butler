@@ -5783,6 +5783,11 @@ select.field-input {
   color: var(--accent-hover);
 }
 
+.library-type-badge.running {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+}
+
 .library-list-time {
   font-size: 0.6875rem;
   color: var(--text-muted);

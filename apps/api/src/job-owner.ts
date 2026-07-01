@@ -9,6 +9,15 @@ export type JobOwner = {
   gatewayPayerAddress?: string;
 };
 
+export function resolveJobOwnerFromSession(sessionId?: string): JobOwner {
+  const cfg = loadCircleConfig();
+  return {
+    sessionId,
+    payerAddress: resolveCircleExecutorAddress() ?? undefined,
+    gatewayPayerAddress: cfg.gatewayPayerAddress,
+  };
+}
+
 export function resolveJobOwnerFromRequest(req: Request): JobOwner {
   const cfg = loadCircleConfig();
   return {
@@ -24,6 +33,16 @@ export function resolveOwnerPayerAddresses(owner: JobOwner): string[] {
   if (owner.payerAddress) set.add(owner.payerAddress.toLowerCase());
   if (owner.gatewayPayerAddress) set.add(owner.gatewayPayerAddress.toLowerCase());
   return [...set];
+}
+
+function ownerHasIdentity(owner: JobOwner): boolean {
+  return !!owner.sessionId || resolveOwnerPayerAddresses(owner).length > 0;
+}
+
+function jobPayerMatchesOwner(job: MarketplaceJob, owner: JobOwner): boolean {
+  const addrs = resolveOwnerPayerAddresses(owner);
+  if (!job.payerAddress || addrs.length === 0) return false;
+  return addrs.includes(job.payerAddress.toLowerCase());
 }
 
 export function stampJobOwner(job: MarketplaceJob, owner?: JobOwner): MarketplaceJob {
@@ -53,31 +72,30 @@ export function stampAuctionOwner(auction: ReverseAuction, owner?: JobOwner): Re
 
 /** Only show jobs this browser session (or payer wallet) created. */
 export function jobVisibleToOwner(job: MarketplaceJob, owner: JobOwner): boolean {
-  if (owner.sessionId && job.ownerSessionId) {
-    return job.ownerSessionId === owner.sessionId;
+  if (owner.sessionId && job.ownerSessionId && job.ownerSessionId === owner.sessionId) {
+    return true;
   }
-  if (owner.payerAddress && job.payerAddress) {
-    return job.payerAddress.toLowerCase() === owner.payerAddress.toLowerCase();
-  }
+  if (jobPayerMatchesOwner(job, owner)) return true;
   return false;
 }
 
 export function filterJobsForOwner(jobs: MarketplaceJob[], owner: JobOwner): MarketplaceJob[] {
-  if (!owner.sessionId && !owner.payerAddress) return [];
+  if (!ownerHasIdentity(owner)) return [];
   return jobs.filter((j) => jobVisibleToOwner(j, owner));
 }
 
 export function auctionVisibleToOwner(auction: ReverseAuction, owner: JobOwner): boolean {
-  if (owner.sessionId && auction.ownerSessionId) {
-    return auction.ownerSessionId === owner.sessionId;
+  if (owner.sessionId && auction.ownerSessionId && auction.ownerSessionId === owner.sessionId) {
+    return true;
   }
-  if (owner.payerAddress && auction.payerAddress) {
-    return auction.payerAddress.toLowerCase() === owner.payerAddress.toLowerCase();
+  const addrs = resolveOwnerPayerAddresses(owner);
+  if (auction.payerAddress && addrs.length > 0) {
+    return addrs.includes(auction.payerAddress.toLowerCase());
   }
   return false;
 }
 
 export function filterAuctionsForOwner(auctions: ReverseAuction[], owner: JobOwner): ReverseAuction[] {
-  if (!owner.sessionId && !owner.payerAddress) return [];
+  if (!ownerHasIdentity(owner)) return [];
   return auctions.filter((a) => auctionVisibleToOwner(a, owner));
 }

@@ -303,7 +303,9 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
     const owner = resolveJobOwnerFromRequest(req);
     const { buildJobSummary, inferPlanFromJob } = await import("./marketplace-task.ts");
     const jobs = filterJobsForOwner(
-      loadMp().jobs.filter((j) => j.status === "completed"),
+      loadMp().jobs.filter((j) =>
+        j.status === "completed" || j.status === "running" || j.status === "paying" || j.status === "pending"
+      ),
       owner
     )
       .slice(-50)
