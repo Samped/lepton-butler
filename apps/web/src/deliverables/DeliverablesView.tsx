@@ -19,11 +19,13 @@ export function DeliverablesView({
   selectedId,
   onSelectId,
   refreshKey = 0,
+  payerLoggedIn = false,
 }: {
   selectedId?: string | null;
   onSelectId?: (id: string | null) => void;
   /** Increment from App refresh to reload the list. */
   refreshKey?: number;
+  payerLoggedIn?: boolean;
 }) {
   const [items, setItems] = useState<MarketplaceDeliverable[]>([]);
   const [selected, setSelected] = useState<MarketplaceDeliverable | null>(null);
@@ -269,11 +271,13 @@ export function DeliverablesView({
           ) : filtered.length === 0 ? (
             <div className="library-sidebar-empty">
               <IconLibrary size={28} />
-              <p>{query ? "No matches" : "No deliverables yet"}</p>
+              <p>{query ? "No matches" : payerLoggedIn ? "No deliverables yet" : "Sign in to see your Library"}</p>
               <span className="muted">
                 {query
                   ? "Try another search"
-                  : "Completed tasks appear here after payment. Run a brief in Agent — full BTC theses target ~1 minute."}
+                  : payerLoggedIn
+                    ? "Completed tasks appear here after payment. Run a brief in Agent — full BTC theses target ~1 minute."
+                    : "Log in with Circle (Payer chip, top right), fund Gateway USDC, then run a task in Agent."}
               </span>
             </div>
           ) : (

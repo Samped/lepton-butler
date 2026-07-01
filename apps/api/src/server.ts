@@ -105,6 +105,16 @@ app.use((req, res, next) => {
     req.path.startsWith("/api/marketplace/agents") ||
     req.path === "/api/marketplace/etfs" ||
     req.path === "/api/marketplace/credits" ||
+    req.path === "/api/marketplace/deliverables" ||
+    req.path === "/api/marketplace/jobs" ||
+    req.path.startsWith("/api/marketplace/jobs/") ||
+    req.path === "/api/marketplace/auctions" ||
+    req.path.startsWith("/api/marketplace/auctions/") ||
+    req.path === "/api/marketplace/loader-status" ||
+    req.path === "/api/butler/readiness" ||
+    req.path.startsWith("/api/butler/run") ||
+    req.path === "/api/agent/status" ||
+    req.path === "/api/policy" ||
     req.path.startsWith("/api/marketplace/registry/") ||
     req.path === "/api/marketplace/agents/research-agent/execute-probe"
   ) {

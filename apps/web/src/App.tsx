@@ -264,6 +264,13 @@ export function App() {
   }, [tab]);
 
   useEffect(() => {
+    const loggedIn = circleStatus?.loggedIn ?? !!loadPayerDisplayCache()?.loggedIn;
+    if (tab === "activity" && !loggedIn && activityScope === "mine") {
+      setActivityScope("all");
+    }
+  }, [tab, circleStatus?.loggedIn, activityScope]);
+
+  useEffect(() => {
     if (tab !== "activity") return;
     void loadActivityLedger(activityScope);
   }, [tab, activityScope, loadActivityLedger]);
@@ -701,7 +708,12 @@ export function App() {
           )}
 
           {tab === "library" && (
-            <DeliverablesView selectedId={libraryJobId} onSelectId={setLibraryJobId} refreshKey={refreshTick} />
+            <DeliverablesView
+              selectedId={libraryJobId}
+              onSelectId={setLibraryJobId}
+              refreshKey={refreshTick}
+              payerLoggedIn={payerLoggedIn}
+            />
           )}
 
           {tab === "marketplace" && (
