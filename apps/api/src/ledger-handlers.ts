@@ -11,6 +11,31 @@ import { resolveMarketplaceForLedger, syncLedgerFromJobs } from "./ledger-sync.t
 import { resolveJobOwnerFromRequest, resolveOwnerPayerAddresses } from "./job-owner.ts";
 import { LEDGER_BACKFILL_VERSION } from "./route-loader-status.ts";
 
+const JOBS_CACHE_MS = 15_000;
+let jobsCache: {
+  at: number;
+  statePath: string;
+  jobs: import("@butler/core").MarketplaceJob[];
+  auctions: import("@butler/core").ReverseAuction[];
+} | null = null;
+
+function jobsForLedger(
+  statePath: string,
+  marketplacePath: string | undefined,
+  sellerAddress: `0x${string}`
+) {
+  if (
+    jobsCache &&
+    jobsCache.statePath === statePath &&
+    Date.now() - jobsCache.at < JOBS_CACHE_MS
+  ) {
+    return { jobs: jobsCache.jobs, auctions: jobsCache.auctions };
+  }
+  const loaded = resolveMarketplaceForLedger(statePath, marketplacePath, sellerAddress);
+  jobsCache = { at: Date.now(), statePath, jobs: loaded.jobs, auctions: loaded.auctions };
+  return loaded;
+}
+
 export function handleGetLedger(
   req: Request,
   res: Response,
@@ -18,56 +43,64 @@ export function handleGetLedger(
   sellerAddress: `0x${string}`,
   marketplacePath?: string
 ): void {
-  const state = loadState(statePath, sellerAddress);
-  const { jobs, auctions } = resolveMarketplaceForLedger(statePath, marketplacePath, sellerAddress);
-  const scope = String(req.query.scope ?? "all");
-  const owner = resolveJobOwnerFromRequest(req);
+  try {
+    const state = loadState(statePath, sellerAddress);
+    const { jobs, auctions } = jobsForLedger(statePath, marketplacePath, sellerAddress);
+    const scope = String(req.query.scope ?? "all");
+    const owner = resolveJobOwnerFromRequest(req);
 
-  const ledgerRecords = syncLedgerFromJobs(statePath, sellerAddress, jobs, auctions);
-  const attributed = applyJobAttribution(
-    attributeLedgerRecords(ledgerRecords),
-    jobs,
-    auctions
-  );
+    const ledgerRecords = syncLedgerFromJobs(statePath, sellerAddress, jobs, auctions, state.records);
+    const attributed = applyJobAttribution(
+      attributeLedgerRecords(ledgerRecords),
+      jobs,
+      auctions
+    );
 
-  const sessionPayers = resolveSessionActivityPayerAddresses(state.records);
-  const ownerPayerAddresses = resolveOwnerPayerAddresses(owner);
-  const activityPayerAddresses =
-    sessionPayers.length > 0 ? sessionPayers : ownerPayerAddresses;
+    const sessionPayers = resolveSessionActivityPayerAddresses(state.records);
+    const ownerPayerAddresses = resolveOwnerPayerAddresses(owner);
+    const activityPayerAddresses =
+      sessionPayers.length > 0 ? sessionPayers : ownerPayerAddresses;
 
-  const allRecords = attributed.slice().reverse();
-  const hasOwner = !!(owner.sessionId || owner.payerAddress || owner.gatewayPayerAddress);
+    const allRecords = attributed.slice().reverse();
+    const hasOwner = !!(owner.sessionId || owner.payerAddress || owner.gatewayPayerAddress);
 
-  let records: SpendRecord[];
-  if (scope === "mine") {
-    if (owner.sessionId) {
-      records = filterRecordsForOwner(attributed, owner, jobs, auctions);
-      if (records.length === 0 && sessionPayers.length > 0) {
+    let records: SpendRecord[];
+    if (scope === "mine") {
+      if (owner.sessionId) {
+        records = filterRecordsForOwner(attributed, owner, jobs, auctions);
+        if (records.length === 0 && sessionPayers.length > 0) {
+          records = filterMineRecords(attributed, sessionPayers);
+        }
+      } else if (sessionPayers.length > 0) {
         records = filterMineRecords(attributed, sessionPayers);
+      } else if (hasOwner) {
+        records = filterRecordsForOwner(attributed, owner, jobs, auctions);
+      } else {
+        records = [];
       }
-    } else if (sessionPayers.length > 0) {
-      records = filterMineRecords(attributed, sessionPayers);
-    } else if (hasOwner) {
-      records = filterRecordsForOwner(attributed, owner, jobs, auctions);
+      records = records.slice().reverse();
+    } else if (hasOwner && scope === "yours") {
+      records = filterRecordsForOwner(attributed, owner, jobs, auctions).slice().reverse();
     } else {
-      records = [];
+      records = allRecords;
     }
-    records = records.slice().reverse();
-  } else if (hasOwner && scope === "yours") {
-    records = filterRecordsForOwner(attributed, owner, jobs, auctions).slice().reverse();
-  } else {
-    records = allRecords;
-  }
 
-  res.json({
-    remainingDailyUsdc: remainingDailyUsdc(state.policy, ledgerRecords),
-    records,
-    totalCount: allRecords.length,
-    activityPayerAddresses,
-    meta: {
-      ledgerVersion: LEDGER_BACKFILL_VERSION,
-      jobsIndexed: jobs.length,
-      persistedRecords: ledgerRecords.length,
-    },
-  });
+    res.json({
+      remainingDailyUsdc: remainingDailyUsdc(state.policy, ledgerRecords),
+      records,
+      totalCount: allRecords.length,
+      activityPayerAddresses,
+      meta: {
+        ledgerVersion: LEDGER_BACKFILL_VERSION,
+        jobsIndexed: jobs.length,
+        materializedRecords: ledgerRecords.length,
+      },
+    });
+  } catch (error) {
+    console.error("[ledger] GET /api/ledger failed:", error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Ledger unavailable",
+      meta: { ledgerVersion: LEDGER_BACKFILL_VERSION },
+    });
+  }
 }

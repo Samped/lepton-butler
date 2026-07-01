@@ -407,10 +407,10 @@ export interface AppConfig {
 export const getConfig = () => request<AppConfig>("/api/config");
 export const getPolicy = () => request<Policy>("/api/policy");
 export const getLedger = (scope?: "all" | "mine") =>
-  request<{ remainingDailyUsdc: string; records: SpendRecord[]; totalCount?: number; activityPayerAddresses?: string[] }>(
+  request<{ remainingDailyUsdc: string; records: SpendRecord[]; totalCount?: number; activityPayerAddresses?: string[]; meta?: { ledgerVersion?: number; jobsIndexed?: number; materializedRecords?: number } }>(
     scope === "mine" ? "/api/ledger?scope=mine" : "/api/ledger",
     undefined,
-    undefined,
+    IS_LOCAL_API ? 20_000 : 120_000,
     undefined,
     scope === "mine"
   );
@@ -847,6 +847,19 @@ export interface AuctionEvent {
 export type QualityTier = "brief" | "standard" | "full";
 export type AuctionMode = "single" | "etf";
 
+export interface UserUsagePreferences {
+  displayName?: string;
+  focusAreas?: string;
+  customInstructions?: string;
+  defaultQualityTier?: QualityTier;
+  defaultCategory?: string;
+  defaultMaxBudgetUsdc?: string;
+  defaultAuctionMode?: AuctionMode;
+  updatedAt?: number;
+}
+
+const USAGE_PREFS_CACHE = "butler.usagePreferences";
+
 export class ButlerRunTimeoutError extends Error {
   readonly runId: string;
 
@@ -1266,6 +1279,54 @@ export async function updatePolicy(patch: Partial<Policy>): Promise<Policy> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   });
+}
+
+export function loadCachedUserPreferences(): UserUsagePreferences {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(USAGE_PREFS_CACHE);
+    return raw ? (JSON.parse(raw) as UserUsagePreferences) : {};
+  } catch {
+    return {};
+  }
+}
+
+function cacheUserPreferences(prefs: UserUsagePreferences): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(USAGE_PREFS_CACHE, JSON.stringify(prefs));
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function getUserPreferences(): Promise<UserUsagePreferences> {
+  try {
+    const prefs = await request<UserUsagePreferences>("/api/user/preferences", undefined, IS_LOCAL_API ? 12_000 : 20_000);
+    cacheUserPreferences(prefs);
+    return prefs;
+  } catch {
+    return loadCachedUserPreferences();
+  }
+}
+
+export async function saveUserPreferences(patch: UserUsagePreferences): Promise<UserUsagePreferences> {
+  const prefs = await request<UserUsagePreferences>("/api/user/preferences", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  cacheUserPreferences(prefs);
+  return prefs;
+}
+
+/** Standing instructions + focus for Agent task briefs. */
+export function buildTaskBriefWithPreferences(task: string, prefs: UserUsagePreferences): string {
+  const parts: string[] = [];
+  if (prefs.focusAreas?.trim()) parts.push(`User focus: ${prefs.focusAreas.trim()}`);
+  if (prefs.customInstructions?.trim()) parts.push(prefs.customInstructions.trim());
+  parts.push(task.trim());
+  return parts.filter(Boolean).join("\n\n");
 }
 
 export async function resetPolicy(): Promise<Policy> {

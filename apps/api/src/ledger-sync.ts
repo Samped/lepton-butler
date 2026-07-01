@@ -128,13 +128,13 @@ export function syncLedgerFromJobs(
   statePath: string,
   sellerAddress: `0x${string}`,
   jobs: MarketplaceJob[],
-  auctions: ReverseAuction[] = []
+  auctions: ReverseAuction[] = [],
+  baseRecords?: SpendRecord[]
 ): SpendRecord[] {
-  const state = loadState(statePath, sellerAddress);
-  const { records, added } = mergeJobSettlementsIntoRecords(state.records, jobs, auctions);
+  const prior = baseRecords ?? loadState(statePath, sellerAddress).records;
+  const { records, added } = mergeJobSettlementsIntoRecords(prior, jobs, auctions);
   if (added > 0) {
-    saveState({ ...state, records }, statePath);
-    console.log(`[ledger] backfilled ${added} payment(s) from marketplace jobs`);
+    console.log(`[ledger] materialized ${added} payment(s) from ${jobs.length} jobs (read-only backfill)`);
   }
   return records;
 }
