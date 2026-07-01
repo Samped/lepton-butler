@@ -8,6 +8,7 @@ import type { Express, Request, Response } from "express";
 import { sessionIdFromRequest, hasActiveUserSession } from "./user-session.ts";
 import { filterJobsForOwner, jobVisibleToOwner, resolveJobOwnerFromRequest } from "./job-owner.ts";
 import { handleGetLedger } from "./ledger-handlers.ts";
+import { handleGetPolicy, handlePutPolicy, handleResetPolicy } from "./policy-handlers.ts";
 import { registerAuctionRoutes } from "./auction-routes.ts";
 import { registerTraceRoutes } from "./trace-routes.ts";
 import { getOpenAiPlannerStatus } from "./openai-planner.ts";
@@ -49,8 +50,15 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
   loadState(STATE_PATH, SELLER);
 
   app.get("/api/policy", (_req, res) => {
-    const state = loadState(STATE_PATH, SELLER);
-    res.json(state.policy);
+    handleGetPolicy(res, STATE_PATH, SELLER);
+  });
+
+  app.put("/api/policy", (req, res) => {
+    handlePutPolicy(req, res, STATE_PATH, SELLER);
+  });
+
+  app.post("/api/policy/reset", (req, res) => {
+    handleResetPolicy(req, res, STATE_PATH, SELLER);
   });
 
   app.get("/api/ledger", (req, res) => {
@@ -237,23 +245,4 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
   console.log(
     "  task routes: policy · ledger · trace · agent/status · butler/run · auctions · registry · x402 execute · deliverables (lite mode)"
   );
-
-  setImmediate(() => {
-    import("node:http").then((http) => {
-      const port = Number(process.env.PORT ?? process.env.API_PORT ?? 3001);
-      const req = http.get(
-        `http://127.0.0.1:${port}/api/marketplace/agents/research-agent/execute-probe`,
-        { timeout: 4000 },
-        (res) => {
-          console.log(`  self-test execute-probe: HTTP ${res.statusCode}`);
-          res.resume();
-        }
-      );
-      req.on("timeout", () => {
-        req.destroy();
-        console.error("  self-test execute-probe: timeout");
-      });
-      req.on("error", (e) => console.error("  self-test execute-probe:", e.message));
-    });
-  });
 }

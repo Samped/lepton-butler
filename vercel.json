@@ -4,6 +4,12 @@
   "buildCommand": "bash apps/web/vercel-build.sh",
   "outputDirectory": "apps/web/dist",
   "framework": null,
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "*": false
+    }
+  },
   "rewrites": [
     {
       "source": "/api/:path*",

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { Express, Request, Response } from "express";
 import type { SpendRecord } from "@butler/core";
 import { handleGetLedger } from "./ledger-handlers.ts";
+import { handleGetPolicy, handlePutPolicy, handleResetPolicy } from "./policy-handlers.ts";
 import { hasActiveUserSession } from "./user-session.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -308,22 +309,15 @@ app.get("/api/decode-batch/:hash", async (req, res) => {
 });
 
 app.get("/api/policy", (_req, res) => {
-  const state = loadState(STATE_PATH);
-  res.json(state.policy);
+  handleGetPolicy(res, STATE_PATH);
 });
 
 app.put("/api/policy", (req, res) => {
-  const state = loadState(STATE_PATH);
-  state.policy = { ...state.policy, ...req.body, version: 1 };
-  saveState(state, STATE_PATH);
-  res.json(state.policy);
+  handlePutPolicy(req, res, STATE_PATH);
 });
 
 app.post("/api/policy/reset", (req, res) => {
-  const owner = (req.body?.ownerAddress ?? "0x0000000000000000000000000000000000000001") as `0x${string}`;
-  const state = { policy: createDefaultPolicy(owner), records: [] as SpendRecord[] };
-  saveState(state, STATE_PATH);
-  res.json(state.policy);
+  handleResetPolicy(req, res, STATE_PATH);
 });
 
 app.get("/api/ledger", (req, res) => {

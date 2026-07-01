@@ -127,12 +127,15 @@ function fallbackPopoverPos(wide = false) {
 }
 
 export function CircleLoginPanel({
+  circleStatus: circleStatusProp,
   onReady,
   onLoginSuccess,
   variant = "toolbar",
   open: openProp,
   onOpenChange,
 }: {
+  /** Shared payer state from App — keeps chip in sync with gateway / wallet row. */
+  circleStatus?: CircleStatus | null;
   onReady?: () => void;
   onLoginSuccess?: (info: { executorAddress: string | null }) => void;
   variant?: "sidebar" | "toolbar" | "mobile-sheet";
@@ -195,7 +198,35 @@ export function CircleLoginPanel({
   const skipResumePoll = useRef(false);
   const sendInFlightRef = useRef(false);
 
-  const connected = status?.loggedIn ?? false;
+  const payerStatus = circleStatusProp ?? status;
+  const connected =
+    payerStatus?.loggedIn ?? !!loadPayerDisplayCache()?.loggedIn;
+
+  useEffect(() => {
+    if (!circleStatusProp) return;
+    setStatus(circleStatusProp);
+    if (circleStatusProp.loggedIn) {
+      clearSession();
+      setStep("email");
+      setJobId(null);
+      setRequestId(null);
+      setSending(false);
+      sendInFlightRef.current = false;
+    }
+  }, [
+    circleStatusProp?.loggedIn,
+    circleStatusProp?.executorAddress,
+    circleStatusProp?.email,
+    circleStatusProp?.gatewayBalanceUsdc,
+  ]);
+
+  useEffect(() => {
+    if (!connected && step === "otp" && !requestId && !sending && !verifying) {
+      clearSession();
+      setStep("email");
+      setJobId(null);
+    }
+  }, [connected, step, requestId, sending, verifying]);
 
   useEffect(() => {
     if (variant !== "mobile-sheet" || !isOpen || step !== "email" || connected) return;
@@ -231,7 +262,7 @@ export function CircleLoginPanel({
         setWallets([]);
       }
     } catch {
-      if (!opts?.quick) setStatus(null);
+      /* Keep prior status on transient API errors — do not flash "Log in". */
     }
   }, []);
 
@@ -248,7 +279,6 @@ export function CircleLoginPanel({
 
   useEffect(() => {
     void refresh({ quick: true });
-    void refresh();
   }, [refresh]);
 
   useEffect(() => {
@@ -565,23 +595,23 @@ export function CircleLoginPanel({
       {connected && !showOtpStep ? (
         <>
           <div className="payer-popover-session">
-            <span className="muted small">{status?.email ?? "Logged in"}</span>
-            {status?.executorAddress && (
-              <code className="payer-address">{shortAddr(status.executorAddress)}</code>
+            <span className="muted small">{payerStatus?.email ?? "Logged in"}</span>
+            {payerStatus?.executorAddress && (
+              <code className="payer-address">{shortAddr(payerStatus.executorAddress)}</code>
             )}
           </div>
-          {status?.gatewayBalanceUsdc != null && (
-            <p className={`payer-balance${Number(status.gatewayBalanceUsdc) === 0 ? " low" : ""}`}>
-              Gateway: {status.gatewayBalanceUsdc} USDC
+          {payerStatus?.gatewayBalanceUsdc != null && (
+            <p className={`payer-balance${Number(payerStatus.gatewayBalanceUsdc) === 0 ? " low" : ""}`}>
+              Gateway: {payerStatus.gatewayBalanceUsdc} USDC
             </p>
           )}
-          {Number(status?.gatewayBalanceUsdc ?? 0) === 0 && status?.executorAddress && (
+          {Number(payerStatus?.gatewayBalanceUsdc ?? 0) === 0 && payerStatus?.executorAddress && (
             <button
               type="button"
               className="btn ghost sm payer-popover-btn"
               disabled={fundBusy}
               onClick={() => {
-                setLoggedInAddress(status.executorAddress);
+                setLoggedInAddress(payerStatus!.executorAddress!);
                 setShowFundModal(true);
               }}
             >
@@ -594,7 +624,7 @@ export function CircleLoginPanel({
                 <button
                   key={w.address}
                   type="button"
-                  className={`circle-wallet-pick ${status?.executorAddress === w.address ? "active" : ""}`}
+                  className={`circle-wallet-pick ${payerStatus?.executorAddress === w.address ? "active" : ""}`}
                   disabled={busy}
                   onClick={() => handleSelectWallet(w.address)}
                 >
@@ -808,15 +838,26 @@ export function CircleLoginPanel({
           {connected ? (
             <>
               <span className="payer-toolbar-label">Payer</span>
-              <span className="payer-toolbar-value email" title={status?.email ?? status?.executorAddress ?? ""}>
-                {status?.email ? shortEmail(status.email) : shortAddr(status?.executorAddress ?? "")}
+              <span
+                className="payer-toolbar-value email"
+                title={payerStatus?.email ?? payerStatus?.executorAddress ?? ""}
+              >
+                {payerStatus?.email
+                  ? shortEmail(payerStatus.email)
+                  : payerStatus?.executorAddress
+                    ? shortAddr(payerStatus.executorAddress)
+                    : loadPayerDisplayCache()?.email
+                      ? shortEmail(loadPayerDisplayCache()!.email!)
+                      : "Connected"}
               </span>
               <span className="payer-dot on" />
             </>
           ) : (
             <>
               <span className="payer-toolbar-label">Payer</span>
-              <span className="payer-toolbar-value warn">{step === "otp" ? "Enter code" : "Log in"}</span>
+              <span className="payer-toolbar-value warn">
+                {step === "otp" && (requestId || sending) ? "Enter code" : "Log in"}
+              </span>
             </>
           )}
           <IconChevronDown size={12} className={isOpen ? "open" : ""} />

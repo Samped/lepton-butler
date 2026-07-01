@@ -13,8 +13,6 @@ import {
   runMarketplaceWorkflow as apiRunMarketplaceWorkflow,
   savePayerDisplayCache,
   shortAddr,
-  toggleAgent,
-  toggleMerchant,
   type AgentStatus,
   type CircleStatus,
   type Health,
@@ -22,13 +20,11 @@ import {
   type SpendRecord,
 } from "./api.ts";
 import {
-  AgentIcon,
   BudgetRing,
   EmptyState,
   MetricChip,
   Panel,
   StatusDot,
-  Toggle,
 } from "./components.tsx";
 import {
   IconActivity,
@@ -49,6 +45,7 @@ import { MarketplaceView } from "./marketplace/MarketplaceView.tsx";
 import { AgentChatView } from "./agent/AgentChatView.tsx";
 import { DeliverablesView } from "./deliverables/DeliverablesView.tsx";
 import { CircleLoginPanel } from "./circle/CircleLoginPanel.tsx";
+import { PolicyEditor } from "./policy/PolicyEditor.tsx";
 import { formatWorkflowError } from "./format.ts";
 import { useIsMobile } from "./use-mobile.ts";
 
@@ -313,20 +310,28 @@ export function App() {
     setMobileMenuOpen(false);
   };
 
+  const payerLoggedIn = circleStatus?.loggedIn ?? !!loadPayerDisplayCache()?.loggedIn;
+  const payerExecutor =
+    circleStatus?.executorAddress ?? loadPayerDisplayCache()?.executorAddress ?? null;
+  const payerGatewayBalance =
+    payerLoggedIn
+      ? circleStatus?.gatewayBalanceUsdc ?? agentStatus?.gatewayBalanceUsdc ?? null
+      : null;
+
   const payerReady =
     agentStatus?.canRun === true ||
-    (!!circleStatus?.loggedIn &&
-      !!circleStatus.executorAddress &&
-      (circleStatus.gatewayBalanceUsdc == null || Number(circleStatus.gatewayBalanceUsdc) > 0));
+    (payerLoggedIn &&
+      !!payerExecutor &&
+      (payerGatewayBalance == null || Number(payerGatewayBalance) > 0));
 
   const payerBlockReason =
     agentStatus?.canRun === false && agentStatus.reason
       ? agentStatus.reason
-      : !circleStatus?.loggedIn
+      : !payerLoggedIn
         ? "Log in with Circle (Payer) to pay agents via x402."
-        : !circleStatus?.executorAddress
+        : !payerExecutor
           ? "No Circle agent wallet found. Open Payer and select a wallet on ARC-TESTNET."
-          : circleStatus.gatewayBalanceUsdc != null && Number(circleStatus.gatewayBalanceUsdc) <= 0
+          : payerGatewayBalance != null && Number(payerGatewayBalance) <= 0
             ? "Fund Gateway USDC in Payer before running tasks."
             : "Log in with Circle (Payer) and fund Gateway USDC before running tasks.";
 
@@ -370,13 +375,9 @@ export function App() {
   const merchantLabel = (merchantId: string) =>
     policy?.merchants.find((m) => m.id === merchantId)?.label ?? SERVICE_LABELS[merchantId] ?? merchantId;
 
-  const payerLoggedIn = circleStatus?.loggedIn ?? !!loadPayerDisplayCache()?.loggedIn;
-  const userWallet = payerLoggedIn
-    ? circleStatus?.executorAddress ?? loadPayerDisplayCache()?.executorAddress ?? null
-    : agentStatus?.circleExecutorAddress ?? agentStatus?.executorAddress ?? null;
+  const userWallet = payerLoggedIn ? payerExecutor : null;
 
-  const gatewayBalance =
-    circleStatus?.gatewayBalanceUsdc ?? agentStatus?.gatewayBalanceUsdc ?? null;
+  const gatewayBalance = payerGatewayBalance;
   const gatewayLabel =
     gatewayBalance != null ? `$${formatUsdc(gatewayBalance)}` : "—";
   const gatewayLow = Number(gatewayBalance ?? 0) === 0;
@@ -431,12 +432,14 @@ export function App() {
 
   const activeNav = NAV.find((n) => n.id === tab)!;
 
-  const accountLabel = circleStatus?.loggedIn
-    ? circleStatus.email
+  const accountLabel = payerLoggedIn
+    ? circleStatus?.email
       ? shortEmail(circleStatus.email)
-      : userWallet
-        ? shortAddr(userWallet)
-        : "Connected"
+      : loadPayerDisplayCache()?.email
+        ? shortEmail(loadPayerDisplayCache()!.email!)
+        : userWallet
+          ? shortAddr(userWallet)
+          : "Connected"
     : "Sign in";
 
   return (
@@ -490,15 +493,15 @@ export function App() {
 
         <button
           type="button"
-          className={`mobile-header-pill account ${circleStatus?.loggedIn ? "connected" : ""}`}
+          className={`mobile-header-pill account ${payerLoggedIn ? "connected" : ""}`}
           onClick={() => {
-            if (circleStatus?.loggedIn) {
+            if (payerLoggedIn) {
               setMobileMenuOpen(true);
             } else {
               setMobileLoginOpen(true);
             }
           }}
-          aria-label={circleStatus?.loggedIn ? "Account and menu" : "Sign in with Circle"}
+          aria-label={payerLoggedIn ? "Account and menu" : "Sign in with Circle"}
         >
           <IconWallet size={14} />
           <span className="mobile-header-pill-text">{accountLabel}</span>
@@ -531,6 +534,7 @@ export function App() {
           variant="mobile-sheet"
           open={mobileLoginOpen}
           onOpenChange={setMobileLoginOpen}
+          circleStatus={circleStatus}
           onReady={refresh}
           onLoginSuccess={() => {
             void refresh();
@@ -552,7 +556,11 @@ export function App() {
               <div className="mobile-menu-account-row">
                 <IconWallet size={18} />
                 <div className="mobile-menu-account-copy">
-                  <strong>{circleStatus?.loggedIn ? circleStatus.email ?? "Circle payer" : "Not signed in"}</strong>
+                  <strong>
+                    {payerLoggedIn
+                      ? circleStatus?.email ?? loadPayerDisplayCache()?.email ?? "Circle payer"
+                      : "Not signed in"}
+                  </strong>
                   {userWallet ? (
                     <span className="muted small mono" title={userWallet}>
                       {shortAddr(userWallet)}
@@ -586,6 +594,7 @@ export function App() {
             <div className="mobile-menu-tools">
               <CircleLoginPanel
                 variant="toolbar"
+                circleStatus={circleStatus}
                 onReady={refresh}
                 onLoginSuccess={() => {
                   void refresh();
@@ -634,20 +643,13 @@ export function App() {
             <div className="toolbar">
               <MetricChip
                 label="Gateway"
-                value={
-                  (circleStatus?.gatewayBalanceUsdc ?? agentStatus?.gatewayBalanceUsdc) != null
-                    ? `$${formatUsdc(circleStatus?.gatewayBalanceUsdc ?? agentStatus?.gatewayBalanceUsdc ?? "0")}`
-                    : "—"
-                }
-                variant={
-                  Number(circleStatus?.gatewayBalanceUsdc ?? agentStatus?.gatewayBalanceUsdc ?? 0) === 0
-                    ? "warning"
-                    : "default"
-                }
+                value={gatewayBalance != null ? `$${formatUsdc(gatewayBalance)}` : "—"}
+                variant={gatewayLow ? "warning" : "default"}
                 accent
               />
               <CircleLoginPanel
                 variant="toolbar"
+                circleStatus={circleStatus}
                 onReady={refresh}
                 onLoginSuccess={() => {
                   void refresh();
@@ -699,7 +701,7 @@ export function App() {
           )}
 
           {payerReady &&
-            (agentStatus?.gatewayBalanceUsdc === "0" || circleStatus?.gatewayBalanceUsdc === "0") &&
+            payerGatewayBalance === "0" &&
             (tab === "agent" || tab === "marketplace") && (
             <div className="inline-alert info">
               <strong>Fund payer</strong> — Gateway USDC balance is zero. Add testnet USDC at{" "}
@@ -748,7 +750,7 @@ export function App() {
 
           {tab === "policy" && (
             policy ? (
-            <div className="policy-view">
+            <>
               <div className="policy-strip">
                 <BudgetRing spent={spentToday} total={dailyLimit} compact />
                 <div className="policy-strip-copy">
@@ -763,51 +765,8 @@ export function App() {
                 <StackStatusPanel embedded />
               </Panel>
 
-              <div className="card-grid">
-                <Panel title="Buyer agents" desc="Orchestrators that pay worker agents">
-                  {policy.agents.map((agent) => (
-                    <article key={agent.role} className={`entity-card ${agent.enabled ? "" : "off"}`}>
-                      <div className="entity-head">
-                        <AgentIcon role={agent.role} />
-                        <div>
-                          <h3 className="capitalize">{agent.role}</h3>
-                          <span className="muted">{agent.categories.join(" · ")}</span>
-                        </div>
-                        <Toggle
-                          label={`Toggle ${agent.role}`}
-                          checked={agent.enabled}
-                          onChange={async (v) => setPolicy(await toggleAgent(agent.role, v, policy))}
-                        />
-                      </div>
-                      <div className="entity-metric">
-                        <span>Daily limit</span>
-                        <strong>${formatUsdc(agent.dailyLimitUsdc)}</strong>
-                      </div>
-                    </article>
-                  ))}
-                </Panel>
-
-                <Panel title="x402 merchants" desc="Legacy routes — marketplace agents preferred">
-                  {policy.merchants.map((m) => (
-                    <article key={m.id} className={`entity-card merchant ${m.enabled ? "" : "off"}`}>
-                      <div className="entity-head">
-                        <span className="price-badge">${formatUsdc(m.priceUsdc ?? "0")}</span>
-                        <div>
-                          <h3>{m.label}</h3>
-                          <span className="muted">{m.category}</span>
-                        </div>
-                        <Toggle
-                          label={`Toggle ${m.id}`}
-                          checked={m.enabled}
-                          onChange={async (v) => setPolicy(await toggleMerchant(m.id, v, policy))}
-                        />
-                      </div>
-                      {m.target && <code className="endpoint">{m.target}</code>}
-                    </article>
-                  ))}
-                </Panel>
-              </div>
-            </div>
+              <PolicyEditor policy={policy} onChange={setPolicy} />
+            </>
             ) : (
               <EmptyState title="Loading policy" desc="Syncing spend limits and merchants from the API." />
             )

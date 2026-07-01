@@ -710,6 +710,55 @@ code {
   min-width: 0;
   max-width: 100%;
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.policy-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.policy-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.policy-field--inline {
+  margin-top: 0.65rem;
+}
+
+.policy-field-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.policy-form-hint {
+  margin: 0.25rem 0 0.75rem;
+}
+
+.policy-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.policy-form-ok {
+  font-size: 0.8125rem;
+  color: var(--accent);
+}
+
+.policy-form-err {
+  font-size: 0.8125rem;
+  color: #f87171;
 }
 
 /* ─── Hero (legacy) ─── */

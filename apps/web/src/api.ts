@@ -1260,6 +1260,14 @@ export async function runAgent(options?: { forceX402?: boolean }): Promise<Agent
   });
 }
 
+export async function updatePolicy(patch: Partial<Policy>): Promise<Policy> {
+  return request("/api/policy", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+}
+
 export async function resetPolicy(): Promise<Policy> {
   return request("/api/policy/reset", {
     method: "POST",
@@ -1270,20 +1278,12 @@ export async function resetPolicy(): Promise<Policy> {
 
 export async function toggleMerchant(id: string, enabled: boolean, policy: Policy): Promise<Policy> {
   const merchants = policy.merchants.map((m) => (m.id === id ? { ...m, enabled } : m));
-  return request("/api/policy", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ merchants }),
-  });
+  return updatePolicy({ merchants });
 }
 
 export async function toggleAgent(role: string, enabled: boolean, policy: Policy): Promise<Policy> {
   const agents = policy.agents.map((a) => (a.role === role ? { ...a, enabled } : a));
-  return request("/api/policy", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ agents }),
-  });
+  return updatePolicy({ agents });
 }
 
 export function formatUsdc(value: string): string {
