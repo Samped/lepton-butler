@@ -18,7 +18,12 @@ import { combineWorkflowResult } from "./deliverable-combine.ts";
 import { stashWorkflowContext } from "./context-store.ts";
 import { GatewayClient } from "@circle-fin/x402-batching/client";
 import { appendLedgerFromOrchestration } from "./ledger-sync.ts";
-import { executeLocalAgentPay, isInternalAgentPayUrl, type LocalAgentExecuteOpts } from "./marketplace-execute.ts";
+
+type LocalAgentExecuteOpts = {
+  statePath: string;
+  policyStatePath: string;
+  sellerAddress: string;
+};
 
 const EMPTY_DELIVERABLE_SUMMARY = "No deliverable content available.";
 
@@ -94,15 +99,17 @@ async function payAndFetch(
       (process.env.BUTLER_USE_CIRCLE_CLI === "true" || (circleCliLoggedIn() && !!circleAddr));
     const userPaysReal = options.initiator === "user" && circleReady;
     const useCircle = circleReady;
-    const allowInternal =
+    const mayUseInternal =
       !options.forceX402 &&
       !userPaysReal &&
       !!options.internalPay &&
-      isInternalAgentPayUrl(payUrl) &&
       process.env.BUTLER_INTERNAL_AGENT_PAY === "true";
 
-    if (allowInternal) {
-      return executeLocalAgentPay(payUrl, options.internalPay!);
+    if (mayUseInternal) {
+      const { isInternalAgentPayUrl, executeLocalAgentPay } = await import("./marketplace-execute.ts");
+      if (isInternalAgentPayUrl(payUrl)) {
+        return executeLocalAgentPay(payUrl, options.internalPay!);
+      }
     }
 
     const url = payUrl;

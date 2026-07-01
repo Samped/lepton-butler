@@ -90,6 +90,7 @@ async function registerMarketplaceExecuteRoutes(
 }
 
 export async function loadTaskRoutes(app: Express): Promise<void> {
+  console.log("  task routes: boot start");
   /** Prefetch while lighter routes register — import is heavy on small VMs. */
   const marketplaceExecuteImport = import("./marketplace-execute.ts");
 
@@ -106,6 +107,7 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
     import("./circle-cli.ts"),
     import("./circle-config.ts"),
   ]);
+  console.log("  task routes: core deps loaded");
 
   loadState(STATE_PATH, SELLER);
 
@@ -129,7 +131,9 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
     handlePutUserPreferences(req, res);
   });
 
-  await registerTraceRoutes(app);
+  void registerTraceRoutes(app).catch((err) => {
+    console.error("Trace routes failed to load:", err instanceof Error ? err.message : err);
+  });
 
   app.get("/api/agent/status", async (_req, res) => {
     try {
@@ -234,6 +238,7 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
     import("./marketplace-task.ts"),
     import("@butler/core"),
   ]);
+  console.log("  task routes: marketplace task module loaded");
 
   const apiBase = resolveApiBase();
 
