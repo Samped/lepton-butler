@@ -6,6 +6,7 @@ import type { Express, Request, Response } from "express";
 import { dirname, resolve } from "node:path";
 import {
   buildQuoteForAgent,
+  externalBaselineCredit,
   getAgentCredits,
   getApprovedAgentIds,
   getMarketplaceAgent,
@@ -34,6 +35,8 @@ export type RegistryRoutesOpts = {
   sellerAddress: string;
 };
 
+let catalogRoutesRegistered = false;
+
 function assertRegistrySeller(req: Request, res: Response, sellerAddress: string): boolean {
   const seller = sellerAddress.toLowerCase();
   const adminKey = process.env.BUTLER_REGISTRY_ADMIN_KEY?.trim();
@@ -51,6 +54,9 @@ function assertRegistrySeller(req: Request, res: Response, sellerAddress: string
 }
 
 export function registerRegistryRoutes(app: Express, opts: RegistryRoutesOpts): void {
+  if (catalogRoutesRegistered) return;
+  catalogRoutesRegistered = true;
+
   const { apiBase, statePath, sellerAddress } = opts;
   const registryPath = getRegistryPath();
   const approvalsPath =
@@ -83,13 +89,16 @@ export function registerRegistryRoutes(app: Express, opts: RegistryRoutesOpts): 
     const credits = mpCredits();
     const creditMap = new Map(credits.map((c) => [c.agentId, c]));
     res.json(
-      listMarketplaceAgents().map((agent) => ({
-        ...agent,
-        approved: isAgentApproved(agent.id, approvalsPath),
-        credit: creditMap.get(agent.id),
-        quote: buildQuoteForAgent(agent, creditMap.get(agent.id)!, apiBase),
-        serviceUrl: resolveAgentServiceUrl(agent, apiBase),
-      }))
+      listMarketplaceAgents().map((agent) => {
+        const credit = creditMap.get(agent.id) ?? externalBaselineCredit(agent);
+        return {
+          ...agent,
+          approved: isAgentApproved(agent.id, approvalsPath),
+          credit,
+          quote: buildQuoteForAgent(agent, credit, apiBase),
+          serviceUrl: resolveAgentServiceUrl(agent, apiBase),
+        };
+      })
     );
   });
 

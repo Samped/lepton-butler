@@ -98,6 +98,12 @@ app.use((req, res, next) => {
     req.path.startsWith("/api/circle/login") ||
     req.path.startsWith("/api/circle/") ||
     req.path === "/api/config" ||
+    req.path === "/api/marketplace" ||
+    req.path === "/api/marketplace/registry" ||
+    req.path.startsWith("/api/marketplace/agents") ||
+    req.path === "/api/marketplace/etfs" ||
+    req.path === "/api/marketplace/credits" ||
+    req.path.startsWith("/api/marketplace/registry/") ||
     req.path === "/api/marketplace/agents/research-agent/execute-probe"
   ) {
     return next();

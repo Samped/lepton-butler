@@ -21,6 +21,8 @@ import {
   scheduleGatewayBalanceRefresh,
 } from "./circle-cli.ts";
 import { loadCircleConfig, resolveCircleExecutorAddress, resolveCircleChain, saveCircleConfig, clearCircleConfig } from "./circle-config.ts";
+import { resolveButlerStatePath } from "./data-paths.ts";
+import { registerRegistryRoutes } from "./registry-routes.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: resolve(__dirname, "../../../.env") });
@@ -29,7 +31,20 @@ const PORT = Number(process.env.PORT ?? process.env.API_PORT ?? 3001);
 const WEB_URL = process.env.WEB_URL ?? `http://localhost:${process.env.WEB_PORT ?? 5174}`;
 const SELLER = (process.env.BUTLER_SELLER_ADDRESS ?? "0x933a2405f84c224be1ef373ba16e992e1f459682") as `0x${string}`;
 
+function resolveApiBase(): string {
+  const configured = process.env.BUTLER_API_URL?.trim();
+  if (configured) return configured.replace(/\/$/, "");
+  return `http://127.0.0.1:${PORT}`;
+}
+
 export function loadCoreRoutes(app: Express): void {
+  /** Agent catalog — available before x402 gateway warm (Auctions → Agent network). */
+  registerRegistryRoutes(app, {
+    apiBase: resolveApiBase(),
+    statePath: resolveButlerStatePath(),
+    sellerAddress: SELLER,
+  });
+
   app.get("/api/config", (_req, res) => {
     res.json({
       chain: ARC_EIP155,
@@ -161,5 +176,5 @@ export function loadCoreRoutes(app: Express): void {
     }
   });
 
-  console.log(`  core routes: Circle login · config (${PORT})`);
+  console.log(`  core routes: Circle · config · agent catalog (${PORT})`);
 }

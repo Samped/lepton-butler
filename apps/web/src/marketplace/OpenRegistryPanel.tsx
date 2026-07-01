@@ -62,7 +62,11 @@ function builtinRegistryFallback(apiOrigin: string): AgentRegistryResponse {
 }
 
 export function OpenRegistryPanel({ onStatsChange }: { onStatsChange?: () => void }) {
-  const [registry, setRegistry] = useState<AgentRegistryResponse | null>(null);
+  const apiOrigin = typeof window !== "undefined" ? window.location.origin : "";
+  const [registry, setRegistry] = useState<AgentRegistryResponse | null>(() =>
+    apiOrigin ? builtinRegistryFallback(apiOrigin) : null
+  );
+  const [loading, setLoading] = useState(true);
   const [payerWallet, setPayerWallet] = useState<string | null>(null);
   const [probeUrl, setProbeUrl] = useState("");
   const [probing, setProbing] = useState(false);
@@ -79,6 +83,7 @@ export function OpenRegistryPanel({ onStatsChange }: { onStatsChange?: () => voi
   }, [sellerAddress, payerWallet]);
 
   const refresh = useCallback(async () => {
+    setLoading(true);
     try {
       const [reg, circle] = await Promise.all([getAgentRegistry(), getCircleStatus().catch(() => null)]);
       setRegistry(reg);
@@ -94,6 +99,8 @@ export function OpenRegistryPanel({ onStatsChange }: { onStatsChange?: () => voi
           : "API unavailable — showing built-in Butler agents offline"
       );
       onStatsChange?.();
+    } finally {
+      setLoading(false);
     }
   }, [onStatsChange]);
 
@@ -148,10 +155,12 @@ export function OpenRegistryPanel({ onStatsChange }: { onStatsChange?: () => voi
   const approvalRequired = registry?.policy?.requireAgentApproval === true;
   const approvedCount = registry?.approvedCount ?? agents.filter((a) => a.approved).length;
 
+  const builtinCount = MARKETPLACE_AGENTS.length;
+
   return (
     <div className="mp-network">
       <p className="mp-network-intro muted">
-        Butler ships {local.length || 15} built-in agents for every user — auctions and x402 payments use this shared network.
+        Butler ships {local.length || builtinCount} built-in agents for every user — auctions and x402 payments use this shared network.
         {external.length > 0 ? ` Plus ${external.length} open-internet agent${external.length === 1 ? "" : "s"}.` : ""}
       </p>
 
@@ -266,7 +275,7 @@ export function OpenRegistryPanel({ onStatsChange }: { onStatsChange?: () => voi
         )}
       </section>
 
-      {local.length === 0 && !error && (
+      {loading && local.length === 0 && !error && (
         <p className="mp-network-foot muted">Loading agent network…</p>
       )}
     </div>

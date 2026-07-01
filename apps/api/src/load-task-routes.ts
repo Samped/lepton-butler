@@ -169,11 +169,9 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
   app.get("/api/payer-agent/run/:runId", butlerRunPoll);
 
   const [
-    { registerRegistryRoutes },
     { buildJobSummary, inferPlanFromJob },
     { loadMarketplaceState },
   ] = await Promise.all([
-    import("./registry-routes.ts"),
     import("./marketplace-task.ts"),
     import("@butler/core"),
   ]);
@@ -193,7 +191,6 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
     );
     const gateway = await createMarketplaceGateway(SELLER);
     await warmGatewayFacilitator(gateway);
-    // Register execute routes before registry so /agents/:agentId/execute is not shadowed.
     registerAgentExecuteRoutes(app, gateway, {
       statePath: STATE_PATH,
       policyStatePath: STATE_PATH,
@@ -205,8 +202,6 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
     setExecuteLoadError(message);
     console.error("Butler API execute routes failed:", message);
   }
-
-  registerRegistryRoutes(app, { apiBase, statePath: STATE_PATH, sellerAddress: SELLER });
 
   const { getRouteLoaderStatus } = await import("./route-loader-status.ts");
   app.get("/api/marketplace/loader-status", (_req, res) => {
@@ -248,6 +243,6 @@ export async function loadTaskRoutes(app: Express): Promise<void> {
   });
 
   console.log(
-    "  task routes: policy · ledger · trace · agent/status · butler/run · auctions · registry · x402 execute · deliverables (lite mode)"
+    "  task routes: policy · trace · agent/status · butler/run · auctions · x402 execute · deliverables (lite mode)"
   );
 }
