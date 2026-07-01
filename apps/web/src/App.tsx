@@ -95,7 +95,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [connectSlow, setConnectSlow] = useState(false);
-  const [activityScope, setActivityScope] = useState<ActivityScope>("mine");
+  const [activityScope, setActivityScope] = useState<ActivityScope>("all");
   const [activityRecords, setActivityRecords] = useState<SpendRecord[]>([]);
   const [ledgerTotalCount, setLedgerTotalCount] = useState(0);
   const [activityPayerAddresses, setActivityPayerAddresses] = useState<string[]>([]);
@@ -111,31 +111,32 @@ export function App() {
   const loadActivityLedger = useCallback(async (scope: ActivityScope) => {
     setActivityLoading(true);
     try {
-      const [ledgerRes, statusRes] = await Promise.allSettled([getLedger(scope), getAgentStatus()]);
-      if (ledgerRes.status === "fulfilled") {
-        const records = ledgerRes.value.records;
-        const total = ledgerRes.value.totalCount ?? records.length;
-        if (scope === "all") {
-          setLedger(records);
-        }
-        setActivityRecords(records);
-        setLedgerTotalCount(total);
-        if (ledgerRes.value.activityPayerAddresses?.length) {
-          setActivityPayerAddresses(ledgerRes.value.activityPayerAddresses);
-        }
-      } else if (ledgerRes.status === "rejected") {
-        const msg = ledgerRes.reason instanceof Error ? ledgerRes.reason.message : "Ledger unavailable";
-        setError(msg);
+      const ledgerRes = await getLedger(scope);
+      const records = ledgerRes.records;
+      const total = ledgerRes.totalCount ?? records.length;
+      if (scope === "all") {
+        setLedger(records);
       }
-      if (statusRes.status === "fulfilled") {
-        setAgentStatus(statusRes.value);
-        if (statusRes.value.activityPayerAddresses?.length) {
-          setActivityPayerAddresses(statusRes.value.activityPayerAddresses);
-        }
+      setActivityRecords(records);
+      setLedgerTotalCount(total);
+      if (ledgerRes.activityPayerAddresses?.length) {
+        setActivityPayerAddresses(ledgerRes.activityPayerAddresses);
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Ledger unavailable";
+      setError(msg);
     } finally {
       setActivityLoading(false);
     }
+
+    void getAgentStatus()
+      .then((statusRes) => {
+        setAgentStatus(statusRes);
+        if (statusRes.activityPayerAddresses?.length) {
+          setActivityPayerAddresses(statusRes.activityPayerAddresses);
+        }
+      })
+      .catch(() => undefined);
   }, []);
 
   const refresh = useCallback(async (opts?: { quiet?: boolean }) => {
@@ -372,10 +373,19 @@ export function App() {
     gatewayBalance != null ? `$${formatUsdc(gatewayBalance)}` : "—";
   const gatewayLow = Number(gatewayBalance ?? 0) === 0;
 
+  const visibleActivityRecords =
+    activityRecords.length > 0
+      ? activityRecords
+      : activityScope === "all" && ledger.length > 0
+        ? ledger
+        : activityRecords;
+
   const activityCountLabel =
     activityScope === "mine"
-      ? `${activityRecords.length} yours · ${ledgerTotalCount || ledger.length} total on Butler`
-      : `${activityRecords.length} payments`;
+      ? `${visibleActivityRecords.length} yours · ${ledgerTotalCount || ledger.length} total on Butler`
+      : `${visibleActivityRecords.length || ledgerTotalCount || ledger.length} payments`;
+
+  const showActivityLoading = activityLoading && visibleActivityRecords.length === 0;
 
   const primaryPayerLabel = userWallet || agentStatus?.circleExecutorAddress || activityPayerAddresses[0] || "";
 
@@ -780,9 +790,9 @@ export function App() {
                 </div>
               }
             >
-              {activityLoading ? (
+              {showActivityLoading ? (
                 <div className="activity-loading muted">Loading payments…</div>
-              ) : activityRecords.length === 0 ? (
+              ) : visibleActivityRecords.length === 0 ? (
                 <EmptyState
                   title={activityScope === "mine" ? "No Agent or Auctions payments yet" : "No payments yet"}
                   body={
@@ -807,7 +817,7 @@ export function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {activityRecords.map((r) => (
+                      {visibleActivityRecords.map((r) => (
                         <tr
                           key={r.id}
                           className={`ledger-row ${r.status === "blocked" ? "dim" : ""} ${selectedActivity?.id === r.id ? "selected" : ""}`}

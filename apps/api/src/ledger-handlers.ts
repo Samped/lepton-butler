@@ -53,7 +53,9 @@ export async function handleGetLedger(
     let ledgerRecords = syncLedgerFromJobs(statePath, sellerAddress, jobs, auctions, state.records, {
       persist: true,
     });
-    const gateway = await syncLedgerFromGateway(sellerAddress, ledgerRecords);
+    const gateway = await syncLedgerFromGateway(sellerAddress, ledgerRecords, {
+      minPersisted: ledgerRecords.length >= 50 ? 50 : undefined,
+    });
     ledgerRecords = gateway.records;
     if (gateway.added > 0) {
       saveState({ ...loadState(statePath, sellerAddress), records: ledgerRecords }, statePath);

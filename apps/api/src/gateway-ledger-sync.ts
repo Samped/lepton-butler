@@ -130,7 +130,7 @@ export async function prefetchGatewayLedgerCache(sellerAddress: string): Promise
 export async function syncLedgerFromGateway(
   sellerAddress: string,
   records: SpendRecord[],
-  opts?: { force?: boolean }
+  opts?: { force?: boolean; minPersisted?: number }
 ): Promise<{ records: SpendRecord[]; added: number; gatewayCount: number }> {
   if (!gatewaySyncEnabled()) {
     return { records, added: 0, gatewayCount: 0 };
@@ -138,6 +138,16 @@ export async function syncLedgerFromGateway(
 
   const seller = sellerAddress.toLowerCase();
   const stale = !cache || cache.seller !== seller || Date.now() - cache.at > CACHE_MS;
+
+  if (
+    !opts?.force &&
+    opts?.minPersisted &&
+    records.length >= opts.minPersisted &&
+    stale
+  ) {
+    void prefetchGatewayLedgerCache(sellerAddress);
+    return { records, added: 0, gatewayCount: records.length };
+  }
 
   if (stale || opts?.force) {
     try {
