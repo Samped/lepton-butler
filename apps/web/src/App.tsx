@@ -7,16 +7,13 @@ import {
   getHealth,
   getHealthQuick,
   getLedger,
-  getPolicy,
   loadPayerDisplayCache,
-  resetPolicy,
   runMarketplaceWorkflow as apiRunMarketplaceWorkflow,
   savePayerDisplayCache,
   shortAddr,
   type AgentStatus,
   type CircleStatus,
   type Health,
-  type Policy,
   type SpendRecord,
 } from "./api.ts";
 import {
@@ -32,7 +29,6 @@ import {
   IconLibrary,
   IconMarketplace,
   IconMenu,
-  IconPolicy,
   IconRefresh,
   IconTrace,
   IconWallet,
@@ -43,11 +39,10 @@ import { MarketplaceView } from "./marketplace/MarketplaceView.tsx";
 import { AgentChatView } from "./agent/AgentChatView.tsx";
 import { DeliverablesView } from "./deliverables/DeliverablesView.tsx";
 import { CircleLoginPanel } from "./circle/CircleLoginPanel.tsx";
-import { PolicyView } from "./policy/PolicyView.tsx";
 import { formatWorkflowError } from "./format.ts";
 import { useIsMobile } from "./use-mobile.ts";
 
-type Tab = "agent" | "library" | "marketplace" | "policy" | "activity" | "trace";
+type Tab = "agent" | "library" | "marketplace" | "activity" | "trace";
 type ActivityScope = "all" | "mine";
 
 const SERVICE_LABELS: Record<string, string> = {
@@ -62,7 +57,6 @@ const NAV: { id: Tab; label: string; Icon: typeof IconMarketplace }[] = [
   { id: "agent", label: "Agent", Icon: IconAgent },
   { id: "library", label: "Library", Icon: IconLibrary },
   { id: "marketplace", label: "Auctions", Icon: IconMarketplace },
-  { id: "policy", label: "Policy", Icon: IconPolicy },
   { id: "activity", label: "Activity", Icon: IconActivity },
   { id: "trace", label: "Trace", Icon: IconTrace },
 ];
@@ -89,9 +83,7 @@ function circleStatusFromCache(): CircleStatus | null {
 
 export function App() {
   const [tab, setTab] = useState<Tab>("agent");
-  const [policy, setPolicy] = useState<Policy | null>(null);
   const [ledger, setLedger] = useState<SpendRecord[]>([]);
-  const [remaining, setRemaining] = useState("0");
   const [health, setHealth] = useState<Health | null>(null);
   const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
   const [circleStatus, setCircleStatus] = useState<CircleStatus | null>(() => circleStatusFromCache());
@@ -122,12 +114,10 @@ export function App() {
       if (ledgerRes.status === "fulfilled") {
         const records = ledgerRes.value.records;
         const total = ledgerRes.value.totalCount ?? records.length;
-        const remainingDaily = ledgerRes.value.remainingDailyUsdc;
         if (scope === "all") {
           setLedger(records);
         }
         setActivityRecords(records);
-        setRemaining(remainingDaily);
         setLedgerTotalCount(total);
         if (ledgerRes.value.activityPayerAddresses?.length) {
           setActivityPayerAddresses(ledgerRes.value.activityPayerAddresses);
@@ -160,11 +150,10 @@ export function App() {
     };
 
     try {
-      const [cs, as, h, p] = await Promise.allSettled([
+      const [cs, as, h] = await Promise.allSettled([
         getCircleStatusQuick(),
         getAgentStatus(),
         getHealth(),
-        getPolicy(),
       ]);
 
       const csRes = pick(cs, "circle/status");
@@ -179,11 +168,9 @@ export function App() {
       }
 
       const healthRes = pick(h, "health");
-      const policyRes = pick(p, "policy");
       if (healthRes) setHealth(healthRes);
-      if (policyRes) setPolicy(policyRes);
 
-      if (!healthRes && !policyRes && !csRes && !asRes) {
+      if (!healthRes && !csRes && !asRes) {
         if (!silent) {
           setError(failed.join(" · ") || "Cannot reach API — run npm run dev:api");
         }
@@ -200,7 +187,6 @@ export function App() {
       const ledgerRes = pick(l, "ledger");
       if (ledgerRes) {
         setLedger(ledgerRes.records);
-        setRemaining(ledgerRes.remainingDailyUsdc);
         setLedgerTotalCount(ledgerRes.totalCount ?? ledgerRes.records.length);
         if (ledgerRes.activityPayerAddresses?.length) {
           setActivityPayerAddresses(ledgerRes.activityPayerAddresses);
@@ -223,7 +209,7 @@ export function App() {
           .catch(() => undefined);
       }
 
-      return !!(policyRes || healthRes || csRes || asRes);
+      return !!(healthRes || csRes || asRes);
     } finally {
       if (!silent) setRefreshing(false);
     }
@@ -369,8 +355,7 @@ export function App() {
     }
   };
 
-  const merchantLabel = (merchantId: string) =>
-    policy?.merchants.find((m) => m.id === merchantId)?.label ?? SERVICE_LABELS[merchantId] ?? merchantId;
+  const merchantLabel = (merchantId: string) => SERVICE_LABELS[merchantId] ?? merchantId;
 
   const userWallet = payerLoggedIn ? payerExecutor : null;
 
@@ -405,8 +390,6 @@ export function App() {
     payerReady;
 
   const live = health?.mode !== "dev";
-  const dailyLimit = policy ? Number(policy.dailyLimitUsdc) : 0;
-  const spentToday = dailyLimit > 0 ? dailyLimit - Number(remaining) : 0;
 
   if (loading) {
     return (
@@ -668,19 +651,6 @@ export function App() {
               >
                 <IconRefresh size={15} className={refreshing ? "spin" : undefined} />
               </button>
-              {tab === "policy" && (
-                <button
-                  type="button"
-                  className="btn ghost sm"
-                  onClick={async () => {
-                    const p = await resetPolicy();
-                    setPolicy(p);
-                    await refresh();
-                  }}
-                >
-                  Reset
-                </button>
-              )}
             </div>
           </div>
         </header>
@@ -743,21 +713,6 @@ export function App() {
                 setTab("library");
               }}
             />
-          )}
-
-          {tab === "policy" && (
-            policy ? (
-              <PolicyView
-                policy={policy}
-                onPolicyChange={setPolicy}
-                remaining={remaining}
-                spentToday={spentToday}
-                dailyLimit={dailyLimit}
-                payerLoggedIn={payerLoggedIn}
-              />
-            ) : (
-              <EmptyState title="Loading policy" desc="Syncing spend limits and merchants from the API." />
-            )
           )}
 
           {tab === "activity" && (
