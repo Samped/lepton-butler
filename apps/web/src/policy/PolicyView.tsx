@@ -15,10 +15,11 @@ import { IconCheck, IconClose, IconEdit } from "../icons.tsx";
 import { StackStatusPanel } from "../trace/StackStatus.tsx";
 
 type PolicyTab = "usage" | "budget" | "agents" | "merchants";
+type EditScope = "usage" | "policy" | null;
 
 const TABS: { id: PolicyTab; label: string; desc: string }[] = [
   { id: "usage", label: "Your usage", desc: "How you want Butler to work for you" },
-  { id: "budget", label: "Spend limits", desc: "Daily caps and policy expiry" },
+  { id: "budget", label: "Spend limits", desc: "Daily and weekly caps" },
   { id: "agents", label: "Buyer agents", desc: "Per-role budgets" },
   { id: "merchants", label: "Merchants", desc: "Allowlisted x402 routes" },
 ];
@@ -100,39 +101,13 @@ function PolicyRow({
   );
 }
 
-function SectionToolbar({
-  editing,
-  saving,
-  onEdit,
-  onCancel,
-  onSave,
-  saveLabel = "Save changes",
-}: {
-  editing: boolean;
-  saving: boolean;
-  onEdit: () => void;
-  onCancel: () => void;
-  onSave: () => void;
-  saveLabel?: string;
-}) {
-  if (editing) {
-    return (
-      <div className="policy-section-toolbar">
-        <button type="button" className="btn ghost sm" disabled={saving} onClick={onCancel}>
-          <IconClose size={14} />
-          Cancel
-        </button>
-        <button type="button" className="btn primary sm" disabled={saving} onClick={onSave}>
-          {saving ? "Saving…" : saveLabel}
-        </button>
-      </div>
-    );
-  }
+function LimitCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <button type="button" className="btn ghost sm policy-edit-btn" onClick={onEdit}>
-      <IconEdit size={14} />
-      Edit
-    </button>
+    <div className="policy-limit-card">
+      <span className="policy-limit-card-label">{label}</span>
+      <span className="policy-limit-card-value">{value}</span>
+      {sub && <span className="policy-limit-card-sub">{sub}</span>}
+    </div>
   );
 }
 
@@ -151,8 +126,8 @@ export function PolicyView({
   dailyLimit: number;
   payerLoggedIn: boolean;
 }) {
-  const [tab, setTab] = useState<PolicyTab>("usage");
-  const [editing, setEditing] = useState<PolicyTab | null>(null);
+  const [tab, setTab] = useState<PolicyTab>("budget");
+  const [editScope, setEditScope] = useState<EditScope>(null);
   const [snapshot, setSnapshot] = useState<EditSnapshot | null>(null);
 
   const [prefs, setPrefs] = useState<UserUsagePreferences>({
@@ -179,6 +154,10 @@ export function PolicyView({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
+
+  const editingUsage = editScope === "usage";
+  const editingPolicy = editScope === "policy";
+  const isEditing = editingUsage || editingPolicy;
 
   const makeSnapshot = useCallback((): EditSnapshot => ({
     prefs: { ...prefs },
@@ -209,14 +188,14 @@ export function PolicyView({
   }, []);
 
   useEffect(() => {
-    if (editing) return;
+    if (isEditing) return;
     setDailyLimitInput(policy.dailyLimitUsdc);
     setWeeklyLimitInput(policy.weeklyLimitUsdc);
     setExpiresOn(expiryDateInput(policy.validUntil));
     setAgentLimits(Object.fromEntries(policy.agents.map((a) => [a.role, a.dailyLimitUsdc])));
     setAgentEnabled(Object.fromEntries(policy.agents.map((a) => [a.role, a.enabled])));
     setMerchantEnabled(Object.fromEntries(policy.merchants.map((m) => [m.id, m.enabled])));
-  }, [policy, editing]);
+  }, [policy, isEditing]);
 
   const spentPct = useMemo(() => {
     if (dailyLimit <= 0) return 0;
@@ -227,25 +206,25 @@ export function PolicyView({
     prefs.displayName?.trim() || prefs.focusAreas?.trim() || prefs.customInstructions?.trim()
   );
 
-  const startEdit = (section: PolicyTab) => {
-    if (editing && editing !== section) {
-      if (snapshot) restoreSnapshot(snapshot);
-    }
+  const startEdit = (scope: EditScope) => {
+    if (editScope && editScope !== scope && snapshot) restoreSnapshot(snapshot);
     setSnapshot(makeSnapshot());
-    setEditing(section);
+    setEditScope(scope);
     setError(null);
     setMessage(null);
+    if (scope === "usage") setTab("usage");
+    else if (scope === "policy" && tab === "usage") setTab("budget");
   };
 
   const cancelEdit = () => {
     if (snapshot) restoreSnapshot(snapshot);
-    setEditing(null);
+    setEditScope(null);
     setSnapshot(null);
     setError(null);
   };
 
   const switchTab = (next: PolicyTab) => {
-    if (editing && editing !== next) cancelEdit();
+    if (isEditing) return;
     setTab(next);
   };
 
@@ -257,6 +236,13 @@ export function PolicyView({
     setWeeklyLimitInput(row.weekly);
   };
 
+  const buildAgentPatch = (): AgentBudget[] =>
+    policy.agents.map((a) => ({
+      ...a,
+      dailyLimitUsdc: agentLimits[a.role]?.trim() || a.dailyLimitUsdc,
+      enabled: agentEnabled[a.role] ?? a.enabled,
+    }));
+
   const saveUsage = async () => {
     setSaving(true);
     setError(null);
@@ -264,7 +250,7 @@ export function PolicyView({
     try {
       const saved = await saveUserPreferences(prefs);
       setPrefs(saved);
-      setEditing(null);
+      setEditScope(null);
       setSnapshot(null);
       setMessage("Usage profile saved. Agent defaults update on your next task.");
     } catch (e) {
@@ -274,82 +260,41 @@ export function PolicyView({
     }
   };
 
-  const saveBudget = async () => {
+  const savePolicy = async () => {
     setSaving(true);
     setError(null);
     setMessage(null);
     try {
-      const agents: AgentBudget[] = policy.agents.map((a) => ({
-        ...a,
-        dailyLimitUsdc: agentLimits[a.role]?.trim() || a.dailyLimitUsdc,
-        enabled: agentEnabled[a.role] ?? a.enabled,
-      }));
       const next = await updatePolicy({
         dailyLimitUsdc: dailyLimitInput.trim(),
         weeklyLimitUsdc: weeklyLimitInput.trim(),
         validUntil: expiryFromDateInput(expiresOn),
-        agents,
+        agents: buildAgentPatch(),
+        merchants: policy.merchants.map((m) => ({
+          ...m,
+          enabled: merchantEnabled[m.id] ?? m.enabled,
+        })),
       });
       onPolicyChange(next);
-      setEditing(null);
+      setEditScope(null);
       setSnapshot(null);
       setPreset(null);
-      setMessage("Spend limits saved. Enforced on every x402 payment.");
+      setMessage("Policy saved — daily cap enforced on every x402 payment.");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save spend limits");
+      setError(e instanceof Error ? e.message : "Could not save policy");
     } finally {
       setSaving(false);
     }
   };
 
-  const saveAgents = async () => {
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const agents: AgentBudget[] = policy.agents.map((a) => ({
-        ...a,
-        dailyLimitUsdc: agentLimits[a.role]?.trim() || a.dailyLimitUsdc,
-        enabled: agentEnabled[a.role] ?? a.enabled,
-      }));
-      const next = await updatePolicy({ agents });
-      onPolicyChange(next);
-      setEditing(null);
-      setSnapshot(null);
-      setMessage("Buyer agent settings saved.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save agent settings");
-    } finally {
-      setSaving(false);
-    }
+  const handleSave = () => {
+    if (editScope === "usage") void saveUsage();
+    else if (editScope === "policy") void savePolicy();
   };
-
-  const saveMerchants = async () => {
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const merchants = policy.merchants.map((m) => ({
-        ...m,
-        enabled: merchantEnabled[m.id] ?? m.enabled,
-      }));
-      const next = await updatePolicy({ merchants });
-      onPolicyChange(next);
-      setEditing(null);
-      setSnapshot(null);
-      setMessage("Merchant allowlist saved.");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save merchants");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const isEditing = (section: PolicyTab) => editing === section;
 
   return (
-    <div className={`policy-page ${editing ? "policy-page--editing" : ""}`}>
-      <header className="policy-hero">
+    <div className={`policy-page ${isEditing ? "policy-page--editing" : ""}`}>
+      <header className={`policy-hero ${isEditing ? "policy-hero--editing" : ""}`}>
         <div className="policy-hero-main">
           <div className="policy-hero-topline">
             <p className="policy-eyebrow">Spend policy</p>
@@ -359,31 +304,68 @@ export function PolicyView({
                   <IconCheck size={10} /> Usage set
                 </Badge>
               )}
-              <Badge variant="default">Cap ${formatUsdc(policy.dailyLimitUsdc)}/day</Badge>
+              <Badge variant="default">${formatUsdc(policy.dailyLimitUsdc)}/day</Badge>
+              <Badge variant="muted">${formatUsdc(policy.weeklyLimitUsdc)}/week</Badge>
             </div>
           </div>
           <h1 className="policy-title">
             {prefs.displayName?.trim() ? prefs.displayName : "Configure your Butler"}
           </h1>
           <p className="policy-subtitle">
-            Review your settings below. Click Edit on any section to change it, then save.
+            Review limits and defaults below. Click Edit policy to change daily and weekly caps, agent
+            budgets, and merchants — then save.
             {payerLoggedIn
               ? " Your usage profile is tied to your Circle session."
               : " Sign in with Circle to persist a personal usage profile."}
           </p>
+
+          <div className="policy-hero-actions">
+            {!isEditing ? (
+              <>
+                <button type="button" className="btn primary policy-hero-btn" onClick={() => startEdit("policy")}>
+                  <IconEdit size={15} />
+                  Edit policy
+                </button>
+                <button type="button" className="btn ghost policy-hero-btn" onClick={() => startEdit("usage")}>
+                  Edit usage profile
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="btn ghost policy-hero-btn" disabled={saving} onClick={cancelEdit}>
+                  <IconClose size={15} />
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn accent policy-hero-btn"
+                  disabled={saving || (editScope === "usage" && !prefsLoaded)}
+                  onClick={handleSave}
+                >
+                  {saving ? "Saving…" : editScope === "usage" ? "Save profile" : "Save policy"}
+                </button>
+              </>
+            )}
+          </div>
+
           {message && <p className="policy-toast policy-toast--ok">{message}</p>}
           {error && <p className="policy-toast policy-toast--err">{error}</p>}
         </div>
+
         <div className="policy-hero-stats">
           <BudgetRing spent={spentToday} total={dailyLimit} />
-          <div className="policy-hero-metrics">
+          <div className="policy-hero-metrics policy-hero-metrics--grid">
+            <div className="policy-metric">
+              <span className="policy-metric-label">Daily cap</span>
+              <span className="policy-metric-value">${formatUsdc(editingPolicy ? dailyLimitInput : policy.dailyLimitUsdc)}</span>
+            </div>
+            <div className="policy-metric">
+              <span className="policy-metric-label">Weekly cap</span>
+              <span className="policy-metric-value">${formatUsdc(editingPolicy ? weeklyLimitInput : policy.weeklyLimitUsdc)}</span>
+            </div>
             <div className="policy-metric">
               <span className="policy-metric-label">Remaining today</span>
               <span className="policy-metric-value">${formatUsdc(remaining)}</span>
-            </div>
-            <div className="policy-metric">
-              <span className="policy-metric-label">Daily cap</span>
-              <span className="policy-metric-value">${formatUsdc(policy.dailyLimitUsdc)}</span>
             </div>
             <div className="policy-metric">
               <span className="policy-metric-label">Used today</span>
@@ -393,17 +375,30 @@ export function PolicyView({
         </div>
       </header>
 
+      {isEditing && (
+        <div className="policy-edit-banner" role="status">
+          <span className="policy-editing-label">
+            {editScope === "usage" ? "Editing usage profile" : "Editing spend policy"}
+          </span>
+          <span className="muted small">
+            {editScope === "policy"
+              ? "Adjust daily & weekly limits, agent budgets, and merchants — then Save policy."
+              : "Update your profile and default task settings — then Save profile."}
+          </span>
+        </div>
+      )}
+
       <nav className="policy-tabs" aria-label="Policy sections">
         {TABS.map(({ id, label, desc }) => (
           <button
             key={id}
             type="button"
-            className={`policy-tab ${tab === id ? "active" : ""} ${editing === id ? "editing" : ""}`}
+            className={`policy-tab ${tab === id ? "active" : ""} ${isEditing && ((editScope === "policy" && id !== "usage") || (editScope === "usage" && id === "usage")) ? "editing" : ""}`}
             onClick={() => switchTab(id)}
             title={desc}
+            disabled={isEditing && editScope === "usage" && id !== "usage"}
           >
             {label}
-            {editing === id && <span className="policy-tab-dot" aria-hidden />}
           </button>
         ))}
       </nav>
@@ -412,24 +407,10 @@ export function PolicyView({
         <div className="policy-tab-panel">
           <Panel
             title="About you"
-            desc={
-              isEditing("usage")
-                ? "Editing — tell Butler what you're working on."
-                : "How Butler shapes Agent tasks for you."
-            }
-            className={isEditing("usage") ? "policy-panel--editing" : ""}
-            action={
-              <SectionToolbar
-                editing={isEditing("usage")}
-                saving={saving}
-                onEdit={() => startEdit("usage")}
-                onCancel={cancelEdit}
-                onSave={() => void saveUsage()}
-                saveLabel="Save profile"
-              />
-            }
+            desc={editingUsage ? "Tell Butler what you're working on." : "How Butler shapes Agent tasks for you."}
+            className={editingUsage ? "policy-panel--editing" : ""}
           >
-            {isEditing("usage") ? (
+            {editingUsage ? (
               <div className="policy-form-stack">
                 <label className="policy-field">
                   <span className="policy-field-label">Display name</span>
@@ -475,9 +456,9 @@ export function PolicyView({
           <Panel
             title="Default task settings"
             desc="Pre-fills the Agent tab — override per task anytime."
-            className={isEditing("usage") ? "policy-panel--editing" : ""}
+            className={editingUsage ? "policy-panel--editing" : ""}
           >
-            {isEditing("usage") ? (
+            {editingUsage ? (
               <>
                 <div className="mp-create-section">
                   <span className="mp-create-section-label">Output quality</span>
@@ -559,7 +540,7 @@ export function PolicyView({
             )}
           </Panel>
 
-          {!prefsLoaded && !isEditing("usage") && (
+          {!prefsLoaded && !editingUsage && (
             <p className="muted small policy-form-hint">Loading your saved profile…</p>
           )}
         </div>
@@ -570,21 +551,11 @@ export function PolicyView({
           <Panel
             title="Spend limits"
             desc={
-              isEditing("budget")
-                ? "Editing — daily cap is enforced at payment time on Arc testnet."
+              editingPolicy
+                ? "Daily cap is enforced at payment time. Weekly cap is for planning."
                 : "Current caps for this Butler instance."
             }
-            className={isEditing("budget") ? "policy-panel--editing" : ""}
-            action={
-              <SectionToolbar
-                editing={isEditing("budget")}
-                saving={saving}
-                onEdit={() => startEdit("budget")}
-                onCancel={cancelEdit}
-                onSave={() => void saveBudget()}
-                saveLabel="Save limits"
-              />
-            }
+            className={editingPolicy ? "policy-panel--editing" : ""}
           >
             <div className="policy-spend-bar" aria-hidden>
               <div className="policy-spend-bar-fill" style={{ width: `${spentPct}%` }} />
@@ -593,7 +564,7 @@ export function PolicyView({
               ${formatUsdc(String(spentToday))} spent of ${formatUsdc(policy.dailyLimitUsdc)} today
             </p>
 
-            {isEditing("budget") ? (
+            {editingPolicy ? (
               <>
                 <div className="policy-preset-row">
                   {BUDGET_PRESETS.map((p) => (
@@ -604,7 +575,7 @@ export function PolicyView({
                       onClick={() => applyPreset(p.id)}
                     >
                       <span className="policy-preset-label">{p.label}</span>
-                      <span className="policy-preset-value">${p.daily}/day</span>
+                      <span className="policy-preset-value">${p.daily}/day · ${p.weekly}/wk</span>
                       <span className="policy-preset-hint">{p.hint}</span>
                     </button>
                   ))}
@@ -613,7 +584,7 @@ export function PolicyView({
                   <label className="policy-field">
                     <span className="policy-field-label">Daily spend cap (USDC)</span>
                     <input
-                      className="field-input"
+                      className="field-input policy-limit-input"
                       type="text"
                       inputMode="decimal"
                       value={dailyLimitInput}
@@ -623,11 +594,12 @@ export function PolicyView({
                       }}
                       autoFocus
                     />
+                    <span className="policy-field-hint">Enforced on every x402 payment</span>
                   </label>
                   <label className="policy-field">
                     <span className="policy-field-label">Weekly planning cap (USDC)</span>
                     <input
-                      className="field-input"
+                      className="field-input policy-limit-input"
                       type="text"
                       inputMode="decimal"
                       value={weeklyLimitInput}
@@ -636,6 +608,7 @@ export function PolicyView({
                         setWeeklyLimitInput(e.target.value);
                       }}
                     />
+                    <span className="policy-field-hint">Must be ≥ daily cap</span>
                   </label>
                   <label className="policy-field">
                     <span className="policy-field-label">Policy valid until</span>
@@ -649,11 +622,21 @@ export function PolicyView({
                 </div>
               </>
             ) : (
-              <div className="policy-view-grid policy-view-grid--cols">
-                <PolicyRow label="Daily cap" value={`$${formatUsdc(dailyLimitInput)}`} />
-                <PolicyRow label="Weekly cap" value={`$${formatUsdc(weeklyLimitInput)}`} />
-                <PolicyRow label="Valid until" value={expiresOn} />
-              </div>
+              <>
+                <div className="policy-limit-cards">
+                  <LimitCard
+                    label="Daily cap"
+                    value={`$${formatUsdc(dailyLimitInput)}`}
+                    sub="Enforced at payment"
+                  />
+                  <LimitCard
+                    label="Weekly cap"
+                    value={`$${formatUsdc(weeklyLimitInput)}`}
+                    sub="Planning limit"
+                  />
+                  <LimitCard label="Valid until" value={expiresOn} />
+                </div>
+              </>
             )}
           </Panel>
 
@@ -669,21 +652,11 @@ export function PolicyView({
           <Panel
             title="Buyer agent budgets"
             desc={
-              isEditing("agents")
-                ? "Editing — per-role daily sub-caps and enablement."
+              editingPolicy
+                ? "Per-role daily sub-caps — each must stay within the global daily cap."
                 : "Orchestrators that pay marketplace workers."
             }
-            className={isEditing("agents") ? "policy-panel--editing" : ""}
-            action={
-              <SectionToolbar
-                editing={isEditing("agents")}
-                saving={saving}
-                onEdit={() => startEdit("agents")}
-                onCancel={cancelEdit}
-                onSave={() => void saveAgents()}
-                saveLabel="Save agents"
-              />
-            }
+            className={editingPolicy ? "policy-panel--editing" : ""}
           >
             <div className="policy-table-wrap">
               <table className="policy-table">
@@ -708,7 +681,7 @@ export function PolicyView({
                         </td>
                         <td className="muted">{agent.categories.join(", ")}</td>
                         <td>
-                          {isEditing("agents") ? (
+                          {editingPolicy ? (
                             <input
                               className="field-input policy-table-input"
                               type="text"
@@ -720,11 +693,13 @@ export function PolicyView({
                               aria-label={`Daily limit for ${agent.role}`}
                             />
                           ) : (
-                            <span className="policy-row-value mono">${formatUsdc(agentLimits[agent.role] ?? agent.dailyLimitUsdc)}</span>
+                            <span className="policy-row-value mono">
+                              ${formatUsdc(agentLimits[agent.role] ?? agent.dailyLimitUsdc)}
+                            </span>
                           )}
                         </td>
                         <td>
-                          {isEditing("agents") ? (
+                          {editingPolicy ? (
                             <Toggle
                               label={`Toggle ${agent.role}`}
                               checked={enabled}
@@ -749,21 +724,11 @@ export function PolicyView({
           <Panel
             title="x402 merchant allowlist"
             desc={
-              isEditing("merchants")
-                ? "Editing — enable or disable legacy API routes."
+              editingPolicy
+                ? "Enable or disable legacy API routes."
                 : "Legacy routes — marketplace agents are preferred for new tasks."
             }
-            className={isEditing("merchants") ? "policy-panel--editing" : ""}
-            action={
-              <SectionToolbar
-                editing={isEditing("merchants")}
-                saving={saving}
-                onEdit={() => startEdit("merchants")}
-                onCancel={cancelEdit}
-                onSave={() => void saveMerchants()}
-                saveLabel="Save merchants"
-              />
-            }
+            className={editingPolicy ? "policy-panel--editing" : ""}
           >
             <div className="policy-table-wrap">
               <table className="policy-table">
@@ -788,7 +753,7 @@ export function PolicyView({
                           {m.target ? <code className="policy-route">{m.target}</code> : "—"}
                         </td>
                         <td>
-                          {isEditing("merchants") ? (
+                          {editingPolicy ? (
                             <Toggle
                               label={`Toggle ${m.id}`}
                               checked={enabled}
@@ -812,11 +777,17 @@ export function PolicyView({
         <StackStatusPanel embedded />
       </Panel>
 
-      {editing && (
+      {isEditing && (
         <footer className="policy-save-bar">
           <div className="policy-save-bar-copy">
-            <span className="policy-editing-label">Editing {TABS.find((t) => t.id === editing)?.label}</span>
-            <span className="muted small">Save to apply, or cancel to discard changes.</span>
+            <span className="policy-editing-label">
+              {editScope === "usage" ? "Editing usage profile" : "Editing spend policy"}
+            </span>
+            <span className="muted small">
+              {editScope === "policy"
+                ? "Daily, weekly, agents, and merchants — save once to apply all changes."
+                : "Save to apply your profile and default task settings."}
+            </span>
           </div>
           <div className="policy-save-bar-actions">
             <button type="button" className="btn ghost" disabled={saving} onClick={cancelEdit}>
@@ -825,15 +796,10 @@ export function PolicyView({
             <button
               type="button"
               className="btn accent"
-              disabled={saving || (editing === "usage" && !prefsLoaded)}
-              onClick={() => {
-                if (editing === "usage") void saveUsage();
-                else if (editing === "budget") void saveBudget();
-                else if (editing === "agents") void saveAgents();
-                else if (editing === "merchants") void saveMerchants();
-              }}
+              disabled={saving || (editScope === "usage" && !prefsLoaded)}
+              onClick={handleSave}
             >
-              {saving ? "Saving…" : "Save changes"}
+              {saving ? "Saving…" : editScope === "usage" ? "Save profile" : "Save policy"}
             </button>
           </div>
         </footer>
