@@ -19,6 +19,7 @@ Restart=always
 RestartSec=8
 KillMode=control-group
 TimeoutStopSec=15
+TimeoutStartSec=120
 ExecStartPre=/bin/bash -c 'date +%s > /tmp/butler-api-boot.ts; fuser -k 3001/tcp 2>/dev/null || true'
 
 [Install]
